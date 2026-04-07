@@ -1367,6 +1367,9 @@ async fn start_official_ls_process(
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
+    // 注入全局代理环境变量，确保 LS 能通过代理连接 Google Cloud Code 上游服务器
+    crate::modules::process::apply_managed_proxy_env_to_command(&mut cmd);
+
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("启动官方 Language Server 失败: {}", e))?;
