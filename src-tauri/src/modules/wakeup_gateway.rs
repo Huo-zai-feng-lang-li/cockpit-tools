@@ -1368,7 +1368,7 @@ async fn start_official_ls_process(
     }
 
     // 注入全局代理环境变量，确保 LS 能通过代理连接 Google Cloud Code 上游服务器
-    crate::modules::process::apply_managed_proxy_env_to_command(&mut cmd);
+    crate::modules::process::apply_managed_proxy_env_to_command(cmd.as_std_mut());
 
     let mut child = cmd
         .spawn()
