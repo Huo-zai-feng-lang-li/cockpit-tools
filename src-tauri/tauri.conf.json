@@ -49,7 +49,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -80,12 +80,6 @@
           "cockpittools"
         ]
       }
-    },
-    "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcxQ0RGQ0FGMjUxOTIyNEQKUldSTkloa2xyL3pOY2EydEJrMnMwc0E0MWZtcXZVSDZwRjN2UytDS09oVHo3cGh5YWRlWTQ4RzMK",
-      "endpoints": [
-        "https://github.com/Huo-zai-feng-lang-li/cockpit-tools/releases/latest/download/latest.json"
-      ]
     }
   }
 }
