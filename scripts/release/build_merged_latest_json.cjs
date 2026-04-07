@@ -60,10 +60,10 @@ function findAsset(assets, pattern, label) {
 function buildPlatformEntry(assetName, signatures, repo, version) {
   const signature = signatures.get(assetName);
   if (!signature) {
-    throw new Error(`Missing signature file for asset ${assetName}`);
+    console.warn(`[Warning] Missing signature file for asset ${assetName}. This is normal if signature artifacts are disabled.`);
   }
   return {
-    signature,
+    signature: signature || "",
     url: buildUrl(repo, version, assetName),
   };
 }
