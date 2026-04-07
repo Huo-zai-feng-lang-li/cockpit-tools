@@ -7,6 +7,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [0.20.19] - 2026-04-07
+
+### 修复
+- **Antigravity 唤醒网关现已向官方 Language Server 子进程注入代理环境变量**：唤醒网关启动官方 LS 二进制时，现在会通过 `apply_managed_proxy_env_to_command` 注入已配置的全局代理，确保 LS 在需要代理的网络环境下可以正常连接 Google Cloud Code 上游服务器，解决此前因 LS 子进程无代理而导致的 60 秒启动超时问题。
+
+---
 ## [0.20.18] - 2026-04-04
 
 ### 变更
