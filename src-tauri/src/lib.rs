@@ -90,8 +90,6 @@ pub fn run() {
             // 初始化 Updater 插件
             #[cfg(desktop)]
             {
-                app.handle()
-
                 app.handle().plugin(tauri_plugin_process::init())?;
                 info!("[Updater] Tauri Updater + Process 插件已初始化");
             }
