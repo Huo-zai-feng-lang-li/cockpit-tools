@@ -592,7 +592,7 @@ enum WakeupTransportMode {
 fn resolve_wakeup_transport_mode() -> WakeupTransportMode {
     match std::env::var("AG_WAKEUP_TRANSPORT_MODE")
         .ok()
-        .unwrap_or_else(|| "client_gateway".to_string())
+        .unwrap_or_else(|| "legacy_cloudcode".to_string())
         .trim()
         .to_ascii_lowercase()
         .as_str()
@@ -1407,7 +1407,8 @@ async fn trigger_wakeup_via_client_gateway_once(
     base_url: &str,
     cancel_rx: Option<&watch::Receiver<bool>>,
 ) -> Result<WakeupResponse, String> {
-    let client = build_gateway_client(base_url, 30)?;
+    // 网关内部链路：LS 冷启动(60s) + StartCascade 上游请求(30s) ≈ 90s，客户端需留足余量。
+    let client = build_gateway_client(base_url, 120)?;
     post_gateway_json(
         &client,
         &format!(
