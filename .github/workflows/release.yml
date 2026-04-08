@@ -410,7 +410,7 @@ jobs:
             echo "Unexpected PR branch: $PR_BRANCH"
             exit 1
           fi
-          gh pr merge "$PR_NUMBER" --auto --squash --delete-branch
+          gh pr merge "$PR_NUMBER" --squash --delete-branch
 
   publish-release:
     name: Publish release as latest
