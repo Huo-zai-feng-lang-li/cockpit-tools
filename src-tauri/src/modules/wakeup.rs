@@ -227,8 +227,6 @@ fn build_request_body(
         "requestId": request_id,
         "model": model,
         "userAgent": crate::modules::quota::build_cloud_code_user_agent(),
-        "clientType": "ANTIGRAVITY",
-        "metadata": crate::modules::quota::build_cloud_code_metadata(Some(project_id)),
         "requestType": "agent",
         "request": {
             "contents": [
