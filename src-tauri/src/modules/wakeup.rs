@@ -536,7 +536,7 @@ async fn send_stream_request(
                             .unwrap_or_default();
                         let retryable = status == reqwest::StatusCode::TOO_MANY_REQUESTS
                             || status.as_u16() >= 500;
-                        let message = format!("唤醒请求失败: {} - {}", status, text);
+                        let message = encode_http_error_to_ui_payload(status.as_u16(), &text);
                         last_error = Some(message.clone());
                         crate::modules::logger::log_warn(&format!(
                             "[Wakeup] 请求失败: url={}, status={}, retryable={}",
@@ -1156,6 +1156,36 @@ fn classify_gateway_error_kind(
         Some(8) | Some(4) | Some(13) | Some(14) | Some(408) | Some(500) | Some(502) | Some(503)
         | Some(504) => "temporary",
         _ => "generic",
+    }
+}
+
+fn encode_http_error_to_ui_payload(status: u16, text: &str) -> String {
+    let mut message = format!("唤醒请求失败: {} - {}", status, text);
+    let mut error_message_json = None;
+
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(text) {
+        if let Some(err_obj) = v.get("error") {
+            if let Some(msg) = err_obj.get("message").and_then(|m| m.as_str()) {
+                message = msg.to_string();
+            }
+        }
+        error_message_json = Some(text.to_string());
+    }
+
+    let payload = WakeupUiErrorPayload {
+        version: 1,
+        kind: classify_gateway_error_kind(Some(status as i64), &None).to_string(),
+        message,
+        error_code: Some(status as i64),
+        validation_url: None,
+        appeal_url: None,
+        trajectory_id: None,
+        error_message_json,
+        step_json: None,
+    };
+    match serde_json::to_string(&payload) {
+        Ok(json_str) => format!("{}{}", WAKEUP_ERROR_JSON_PREFIX, json_str),
+        Err(_) => format!("唤醒请求失败: {} - {}", status, text),
     }
 }
 
