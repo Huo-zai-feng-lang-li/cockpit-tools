@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.20] - 2026-04-08
+
+### Fixed
+
+- **Antigravity wakeup now defaults to legacy_cloudcode direct-connect mode, bypassing Language Server cold start**: wakeup requests no longer cascade through client_gateway to spawn the official LS process, eliminating 60-second+ cold-start timeouts and achieving sub-second response times.
+- **Wakeup HTTP errors (e.g. 429 quota exhausted) are now properly formatted into UI-renderable payloads**: added `encode_http_error_to_ui_payload` adapter that destructures raw Google error JSON into `WakeupUiErrorPayload`, ensuring the frontend can gracefully display "quota exceeded" or "verification required" messages instead of raw JSON.
+- **Quota refresh now returns immediately on 429 Too Many Requests without redundant retries or sleeps**: `loadCodeAssist` and `fetchAvailableModels` now short-circuit on 429 responses, avoiding exponential backoff retries on rate-limited accounts and dramatically improving batch "Refresh All" performance.
+
+---
+
 ## [0.20.19] - 2026-04-07
 
 ### Fixed
