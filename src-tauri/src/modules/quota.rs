@@ -851,10 +851,20 @@ pub async fn fetch_project_id_with_context(
                     );
                     log_subscription_tier_result(email, subscription_tier.as_ref(), &reason);
                     return (None, subscription_tier, credits);
+                } else if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                    let text = res.text().await.unwrap_or_default();
+                    let reason = format!(
+                        "loadCodeAssist 返回 429 Too Many Requests, base={}, attempt={}/{}, body={}",
+                        base_url,
+                        attempt,
+                        DEFAULT_ATTEMPTS,
+                        truncate_log_text(&text, 1000)
+                    );
+                    log_subscription_tier_result(email, subscription_tier.as_ref(), &reason);
+                    return (None, subscription_tier, credits);
                 } else {
                     let text = res.text().await.unwrap_or_default();
-                    let retryable =
-                        status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.as_u16() >= 500;
+                    let retryable = status.as_u16() >= 500;
                     last_error = Some(format!(
                         "loadCodeAssist 失败: status={}, base={}, attempt={}/{}, body={}",
                         status,
@@ -1019,6 +1029,29 @@ pub async fn fetch_quota_with_context(
                         q.subscription_tier = subscription_tier.clone();
                         let message = if text.trim().is_empty() {
                             "API returned 403 Forbidden".to_string()
+                        } else {
+                            text
+                        };
+                        return Ok(QuotaFetchResult {
+                            quota: q,
+                            error: Some(QuotaFetchError {
+                                code: Some(status.as_u16()),
+                                message,
+                            }),
+                        });
+                    }
+
+                    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                        crate::modules::logger::log_warn(&format!(
+                            "账号请求超限 (429 Too Many Requests), 不再重试: {}",
+                            email
+                        ));
+                        let text = response.text().await.unwrap_or_default();
+                        let mut q = QuotaData::new();
+                        q.is_forbidden = false;
+                        q.subscription_tier = subscription_tier.clone();
+                        let message = if text.trim().is_empty() {
+                            "API returned 429 Too Many Requests".to_string()
                         } else {
                             text
                         };
