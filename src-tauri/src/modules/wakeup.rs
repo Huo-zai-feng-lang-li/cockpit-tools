@@ -15,7 +15,6 @@ const CLOUD_CODE_BASE_URLS: [&str; 3] = [
 ];
 const STREAM_PATH: &str = "/v1internal:streamGenerateContent?alt=sse";
 const FETCH_MODELS_PATH: &str = "/v1internal:fetchAvailableModels";
-const USER_AGENT: &str = "antigravity";
 const ANTIGRAVITY_SYSTEM_PROMPT: &str = "You are Antigravity, a powerful agentic AI coding assistant designed by the Google Deepmind team working on Advanced Agentic Coding.You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.**Absolute paths only****Proactiveness**";
 const DEFAULT_ATTEMPTS: usize = 2;
 const BACKOFF_BASE_MS: u64 = 500;
@@ -227,7 +226,9 @@ fn build_request_body(
         "project": project_id,
         "requestId": request_id,
         "model": model,
-        "userAgent": "antigravity",
+        "userAgent": crate::modules::quota::build_cloud_code_user_agent(),
+        "clientType": "ANTIGRAVITY",
+        "metadata": crate::modules::quota::build_cloud_code_metadata(Some(project_id)),
         "requestType": "agent",
         "request": {
             "contents": [
@@ -471,7 +472,7 @@ async fn send_stream_request(
                 client
                     .post(&url)
                     .bearer_auth(access_token)
-                    .header(reqwest::header::USER_AGENT, USER_AGENT)
+                    .header(reqwest::header::USER_AGENT, crate::modules::quota::build_cloud_code_user_agent())
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .header(reqwest::header::ACCEPT_ENCODING, "gzip")
                     .json(body)
@@ -837,7 +838,7 @@ async fn resolve_requested_model_for_official_ls(
                 client
                     .post(&url)
                     .bearer_auth(&token.access_token)
-                    .header(reqwest::header::USER_AGENT, USER_AGENT)
+                    .header(reqwest::header::USER_AGENT, crate::modules::quota::build_cloud_code_user_agent())
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .header(reqwest::header::ACCEPT_ENCODING, "gzip")
                     .json(&payload)
@@ -2064,7 +2065,7 @@ async fn fetch_available_models_from_access_token(
             let response = client
                 .post(url)
                 .bearer_auth(access_token)
-                .header(reqwest::header::USER_AGENT, USER_AGENT)
+                .header(reqwest::header::USER_AGENT, crate::modules::quota::build_cloud_code_user_agent())
                 .header(reqwest::header::CONTENT_TYPE, "application/json")
                 .header(reqwest::header::ACCEPT_ENCODING, "gzip")
                 .json(&payload)

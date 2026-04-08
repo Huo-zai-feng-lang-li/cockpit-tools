@@ -158,7 +158,7 @@ fn build_load_code_assist_user_agent() -> String {
     )
 }
 
-fn build_cloud_code_user_agent() -> String {
+pub(crate) fn build_cloud_code_user_agent() -> String {
     let ide_version = official_antigravity_version_for_cloud_code();
     let os = load_code_assist_user_agent_os();
     let arch = load_code_assist_user_agent_arch();
@@ -208,7 +208,7 @@ fn cloud_code_plugin_version() -> String {
     version.to_string()
 }
 
-fn build_cloud_code_metadata(duet_project: Option<&str>) -> Value {
+pub(crate) fn build_cloud_code_metadata(duet_project: Option<&str>) -> Value {
     let mut metadata = serde_json::Map::new();
     metadata.insert(
         "ideName".to_string(),
