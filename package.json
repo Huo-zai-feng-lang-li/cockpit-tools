@@ -1,9 +1,10 @@
 {
   "name": "cockpit-tools",
   "private": true,
-  "version": "0.20.20",
+  "version": "0.20.21",
   "type": "module",
   "scripts": {
+    "tauri:dev": "npm run tauri dev",
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "prebuild": "npm run typecheck",

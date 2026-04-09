@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.21] - 2026-04-09
+
+### Changed
+
+- **Desktop auto-updater is now fully configured for signed update delivery**: enabled `createUpdaterArtifacts`, registered `tauri-plugin-updater` in Rust runtime, and configured updater public key and GitHub Releases endpoint in `tauri.conf.json`, completing the end-to-end update verification pipeline.
+
+---
+
 ## [0.20.20] - 2026-04-08
 
 ### Fixed

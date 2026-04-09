@@ -87,9 +87,11 @@ pub fn run() {
             // 存储全局 AppHandle
             let _ = APP_HANDLE.set(app.handle().clone());
 
-            // 初始化 Updater 插件
+            // 初始化 Updater + Process 插件
             #[cfg(desktop)]
             {
+                app.handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())?;
                 app.handle().plugin(tauri_plugin_process::init())?;
                 info!("[Updater] Tauri Updater + Process 插件已初始化");
             }

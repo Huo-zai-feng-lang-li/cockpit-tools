@@ -8,6 +8,14 @@
 
 ---
 
+## [0.20.21] - 2026-04-09
+
+### 变更
+
+- **桌面端自动更新已完成签名分发全链路配置**：启用 `createUpdaterArtifacts`，在 Rust 运行时注册 `tauri-plugin-updater` 插件，并在 `tauri.conf.json` 中配置更新签名公钥与 GitHub Releases 端点，补齐端到端更新验签管线。
+
+---
+
 ## [0.20.20] - 2026-04-08
 
 ### 修复
