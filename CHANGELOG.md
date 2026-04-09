@@ -8,11 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [0.20.21] - 2026-04-09
+## [0.20.22] - 2026-04-09
+
+### Added
+
+- **Accounts page search input now includes a one-click clear mechanism**: added a dismissable inline 'X' button that appears when the input has content, resetting the query state instantly to improve multi-account filtering flows.
+- **Account search boxes are now responsive and wider by default**: increased the underlying clamp boundaries (`clamp(160px, 14vw, 220px)`) across Antigravity, Codex, Kiro, Windsurf and other platform account pages to better handle average email lengths, and added dedicated inner padding guarantees for clear-button interactions.
 
 ### Changed
 
-- **Desktop auto-updater is now fully configured for signed update delivery**: enabled `createUpdaterArtifacts`, registered `tauri-plugin-updater` in Rust runtime, and configured updater public key and GitHub Releases endpoint in `tauri.conf.json`, completing the end-to-end update verification pipeline.
+- **Antigravity seamless auto-switch architecture is now fully documented**: added complete technical principles covering dual-channel transmission, in-memory host token replacement mechanisms, and the newly established four-layer defense system (Velocity-Based Predictive Switch, Threshold-Based Safety Net, Reactive 429 Recovery, and Accelerated Dynamic Sampling).
+
+### Fixed
+
+- **Seamless account switching now consistently triggers frontend updates across all success and error paths**: repaired WebSocket broadcasting bugs inside `switch_account_dual_no_restart`, guaranteeing that the Tauri UI instantly resets quota states and refreshes after out-of-band token hot-swaps succeed or abort.
+
+---
+
+## [0.20.21] - 2026-04-09
 
 ---
 

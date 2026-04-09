@@ -977,6 +977,118 @@ const AUTO_SWITCH_POLICY_AVG_QUOTA_DESC_LAST_USED_ASC: &str = "avg_quota_desc_th
 const AUTO_SWITCH_RULE_CURRENT_DISABLED: &str = "current_disabled";
 const AUTO_SWITCH_RULE_CURRENT_QUOTA_FORBIDDEN: &str = "current_quota_forbidden";
 const AUTO_SWITCH_RULE_GROUP_BELOW_THRESHOLD: &str = "group_below_threshold";
+const AUTO_SWITCH_RULE_VELOCITY_PREDICTED_EXHAUSTION: &str = "velocity_predicted_exhaustion";
+
+/// 速率预判：预测将在多少秒内耗尽配额时触发切号
+const VELOCITY_SAFETY_MARGIN_SECS: f64 = 90.0;
+/// 最小消耗速率阈值（低于此值视为无显著消耗，避免噪声误判）
+const VELOCITY_MIN_RATE_PER_SEC: f64 = 0.05;
+/// 安全水位门槛：仅当配额低于此百分比时才启用速率预判（避免高配额时误判）
+const VELOCITY_ACTIVATION_THRESHOLD: f64 = 30.0;
+
+/// 上一次配额快照（用于计算消耗速率）
+static QUOTA_VELOCITY_SNAPSHOT: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<String, QuotaVelocitySnapshot>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+#[derive(Debug, Clone)]
+struct QuotaVelocitySnapshot {
+    /// 各模型组的平均配额百分比
+    group_percentages: Vec<(String, f64)>,
+    /// 快照时间戳（秒）
+    timestamp: f64,
+}
+
+/// 记录当前配额快照（每次刷新后调用）
+fn record_quota_velocity_snapshot(account_id: &str, group_quotas: &[AutoSwitchGroupQuota]) {
+    let snapshot = QuotaVelocitySnapshot {
+        group_percentages: group_quotas
+            .iter()
+            .map(|g| (g.id.clone(), g.percentage as f64))
+            .collect(),
+        timestamp: chrono::Utc::now().timestamp_millis() as f64 / 1000.0,
+    };
+    if let Ok(mut store) = QUOTA_VELOCITY_SNAPSHOT.lock() {
+        store.insert(account_id.to_string(), snapshot);
+    }
+}
+
+/// 速率预判：根据消耗速度预测是否即将耗尽
+/// 返回：命中的组列表（组ID, 组名, 当前百分比, 预测剩余秒数）
+fn evaluate_velocity_prediction(
+    account_id: &str,
+    current_group_quotas: &[AutoSwitchGroupQuota],
+) -> Vec<(String, String, i32, f64)> {
+    let prev_snapshot = match QUOTA_VELOCITY_SNAPSHOT.lock() {
+        Ok(store) => store.get(account_id).cloned(),
+        Err(_) => None,
+    };
+
+    let Some(prev) = prev_snapshot else {
+        return Vec::new();
+    };
+
+    let now_ts = chrono::Utc::now().timestamp_millis() as f64 / 1000.0;
+    let dt = now_ts - prev.timestamp;
+    // 至少间隔 10 秒才有意义（避免除零和噪声）
+    if dt < 10.0 {
+        return Vec::new();
+    }
+
+    let mut hits = Vec::new();
+
+    for current in current_group_quotas {
+        // 在上一次快照里查找同 ID 分组
+        let prev_pct = match prev
+            .group_percentages
+            .iter()
+            .find(|(id, _)| id == &current.id)
+        {
+            Some((_, pct)) => *pct,
+            None => continue,
+        };
+
+        let current_pct = current.percentage as f64;
+
+        // 安全水位门槛：配额充足时不启用速率预判
+        if current_pct > VELOCITY_ACTIVATION_THRESHOLD {
+            continue;
+        }
+
+        let consumed = prev_pct - current_pct;
+
+        // 只关心正向消耗（配额在减少）
+        if consumed <= 0.0 {
+            continue;
+        }
+
+        let rate_per_sec = consumed / dt;
+
+        // 过滤噪声：极低消耗不触发
+        if rate_per_sec < VELOCITY_MIN_RATE_PER_SEC {
+            continue;
+        }
+
+        // 预测归零时间
+        let time_to_zero = current_pct / rate_per_sec;
+
+        if time_to_zero < VELOCITY_SAFETY_MARGIN_SECS {
+            modules::logger::log_warn(&format!(
+                "[AutoSwitch/Velocity] 🔮 预判命中: group={}, prev={:.1}%, now={:.1}%, rate={:.2}%/s, predicted_exhaustion={:.0}s (< {}s)",
+                current.name, prev_pct, current_pct, rate_per_sec, time_to_zero, VELOCITY_SAFETY_MARGIN_SECS
+            ));
+            hits.push((
+                current.id.clone(),
+                current.name.clone(),
+                current.percentage,
+                time_to_zero,
+            ));
+        }
+    }
+
+    hits
+}
+
 
 #[derive(Debug, Clone)]
 struct AutoSwitchGroupDefinition {
@@ -1221,30 +1333,64 @@ fn evaluate_auto_switch_trigger(
     }
 
     let group_quotas = collect_group_quotas(account, monitored_groups);
-    let hit_groups: Vec<modules::antigravity_switch_history::AntigravityAutoSwitchHitGroup> =
+
+    // ── 规则 1：传统阈值判定 ──
+    let threshold_hits: Vec<modules::antigravity_switch_history::AntigravityAutoSwitchHitGroup> =
         group_quotas
-            .into_iter()
+            .iter()
             .filter(|group| group.percentage <= threshold)
             .map(
                 |group| modules::antigravity_switch_history::AntigravityAutoSwitchHitGroup {
-                    group_id: group.id,
-                    group_name: group.name,
+                    group_id: group.id.clone(),
+                    group_name: group.name.clone(),
                     percentage: group.percentage,
                 },
             )
             .collect();
-    if hit_groups.is_empty() {
-        return None;
+
+    if !threshold_hits.is_empty() {
+        // 记录快照（供下次速率计算）
+        record_quota_velocity_snapshot(&account.id, &group_quotas);
+        return Some(AutoSwitchTriggerContext {
+            rule: AUTO_SWITCH_RULE_GROUP_BELOW_THRESHOLD.to_string(),
+            threshold,
+            scope_mode: scope_mode.to_string(),
+            selected_group_ids,
+            selected_group_names,
+            hit_groups: threshold_hits,
+        });
     }
 
-    Some(AutoSwitchTriggerContext {
-        rule: AUTO_SWITCH_RULE_GROUP_BELOW_THRESHOLD.to_string(),
-        threshold,
-        scope_mode: scope_mode.to_string(),
-        selected_group_ids,
-        selected_group_names,
-        hit_groups,
-    })
+    // ── 规则 2：速率预判（当前未触发阈值，但消耗速度快，预测即将耗尽） ──
+    let velocity_hits = evaluate_velocity_prediction(&account.id, &group_quotas);
+
+    // 每次判定都更新快照（慢消耗场景也需要持续更新基线）
+    record_quota_velocity_snapshot(&account.id, &group_quotas);
+
+    if !velocity_hits.is_empty() {
+        let hit_groups: Vec<modules::antigravity_switch_history::AntigravityAutoSwitchHitGroup> =
+            velocity_hits
+                .iter()
+                .map(|(id, name, pct, _ttl)| {
+                    modules::antigravity_switch_history::AntigravityAutoSwitchHitGroup {
+                        group_id: id.clone(),
+                        group_name: name.clone(),
+                        percentage: *pct,
+                    }
+                })
+                .collect();
+
+        return Some(AutoSwitchTriggerContext {
+            rule: AUTO_SWITCH_RULE_VELOCITY_PREDICTED_EXHAUSTION.to_string(),
+            threshold,
+            scope_mode: scope_mode.to_string(),
+            selected_group_ids,
+            selected_group_names,
+            hit_groups,
+        });
+    }
+
+    None
 }
 
 fn can_be_auto_switch_candidate(
@@ -1613,14 +1759,22 @@ async fn run_auto_switch_if_needed_inner() -> Result<Option<Account>, String> {
     ));
 
     let switched = if cfg.antigravity_dual_switch_no_restart_enabled {
-        switch_account_dual_no_restart(
+        match switch_account_dual_no_restart(
             &target.id,
             "auto",
             "tools.account.auto_switch",
             "auto_switch",
             Some(reason_snapshot),
         )
-        .await?
+        .await
+        {
+            Ok(account) => account,
+            Err(e) => {
+                // 即使无感阶段失败，本地切号已完成，仍需通知前端刷新
+                modules::websocket::broadcast_data_changed("auto_switch");
+                return Err(e);
+            }
+        }
     } else {
         let switched = switch_account_internal(&target.id).await?;
         modules::websocket::broadcast_account_switched(&switched.id, &switched.email);

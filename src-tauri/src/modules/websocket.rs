@@ -286,6 +286,12 @@ pub fn broadcast_account_switched(account_id: &str, email: &str) {
         email: email.to_string(),
     });
     crate::modules::logger::log_info("[WS] 广播账号切换");
+
+    // 同时通知 Tauri 前端刷新（确保 UI 立即感知切号）
+    if let Some(app_handle) = crate::get_app_handle() {
+        use tauri::Emitter;
+        let _ = app_handle.emit("accounts:refresh", "account_switched");
+    }
 }
 
 /// 广播唤醒互斥开关
@@ -752,6 +758,36 @@ async fn handle_client_message(
 
         WsMessage::NotifyDataChanged { source } => {
             crate::modules::logger::log_info(&format!("[WS] 收到数据变更通知: {}", source));
+
+            // 识别额度耗尽信号，触发紧急刷新+切号
+            if source == "quota_exhausted" || source == "resource_exhausted" {
+                crate::modules::logger::log_warn(&format!(
+                    "[WS] 🚨 收到额度耗尽信号(source={})，触发紧急刷新",
+                    source
+                ));
+                let server_tx = server.tx.clone();
+                tokio::spawn(async move {
+                    // 1. 立即刷新当前账号配额
+                    if let Err(e) = reactive_quota_refresh_and_switch().await {
+                        crate::modules::logger::log_warn(&format!(
+                            "[WS] 紧急刷新切号失败: {}",
+                            e
+                        ));
+                    }
+                    // 2. 通知前端刷新
+                    let changed_msg = WsMessage::DataChanged {
+                        source: "reactive_switch".to_string(),
+                    };
+                    if let Ok(json) = serde_json::to_string(&changed_msg) {
+                        let _ = server_tx.send(json);
+                    }
+                    if let Some(app_handle) = crate::get_app_handle() {
+                        use tauri::Emitter;
+                        let _ = app_handle.emit("accounts:refresh", "reactive_switch");
+                    }
+                });
+            }
+
             // 广播给其他客户端
             server.broadcast(WsMessage::DataChanged { source });
         }
@@ -976,4 +1012,72 @@ fn handle_set_language(language: &str, source: Option<&str>) -> Result<String, S
     broadcast_language_changed(&normalized, source.unwrap_or("ws"));
 
     Ok(format!("语言已更新为 {}", normalized))
+}
+
+/// 反应式紧急刷新：收到额度耗尽信号后立即刷新当前账号并触发切号判定
+async fn reactive_quota_refresh_and_switch() -> Result<(), String> {
+    use std::sync::atomic::{AtomicI64, Ordering};
+
+    // 防抖：10 秒内不重复触发
+    static LAST_REACTIVE_TS: AtomicI64 = AtomicI64::new(0);
+    const COOLDOWN_SECS: i64 = 10;
+
+    let now = chrono::Utc::now().timestamp();
+    let last = LAST_REACTIVE_TS.load(Ordering::Relaxed);
+    if now - last < COOLDOWN_SECS {
+        crate::modules::logger::log_info("[ReactiveSwitch] cooldown 中，跳过本次紧急刷新");
+        return Ok(());
+    }
+    LAST_REACTIVE_TS.store(now, Ordering::Relaxed);
+
+    crate::modules::logger::log_warn("[ReactiveSwitch] 🚨 开始紧急刷新当前账号配额...");
+
+    // 1. 获取当前账号并刷新配额
+    let current = crate::modules::get_current_account()
+        .map_err(|e| format!("获取当前账号失败: {}", e))?;
+    let Some(mut account) = current else {
+        return Err("未找到当前账号".to_string());
+    };
+
+    let quota: crate::models::QuotaData = crate::modules::fetch_quota_with_delayed_retry(&mut account, true)
+        .await
+        .map_err(|e| format!("紧急配额刷新失败: {}", e))?;
+    crate::modules::update_account_quota(&account.id, quota)
+        .map_err(|e| format!("更新配额失败: {}", e))?;
+
+    crate::modules::logger::log_info("[ReactiveSwitch] 配额已刷新，执行自动切号判定...");
+
+    // 2. 执行自动切号
+    match crate::modules::account::run_auto_switch_if_needed().await {
+        Ok(Some(switched)) => {
+            crate::modules::logger::log_info(&format!(
+                "[ReactiveSwitch] ✅ 紧急切号完成: {}",
+                switched.email
+            ));
+            // 更新系统托盘
+            if let Some(app_handle) = crate::get_app_handle() {
+                let _ = crate::modules::tray::update_tray_menu(app_handle);
+            }
+        }
+        Ok(None) => {
+            crate::modules::logger::log_info(
+                "[ReactiveSwitch] 未触发切号（可能阈值未达或无候选账号）",
+            );
+            // 即使未切号，也尝试执行预警
+            if let Err(e) = crate::modules::account::run_quota_alert_if_needed() {
+                crate::modules::logger::log_warn(&format!(
+                    "[ReactiveSwitch] 预警检查失败: {}",
+                    e
+                ));
+            }
+        }
+        Err(e) => {
+            crate::modules::logger::log_warn(&format!(
+                "[ReactiveSwitch] 自动切号执行失败: {}",
+                e
+            ));
+        }
+    }
+
+    Ok(())
 }

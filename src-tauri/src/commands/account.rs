@@ -110,6 +110,81 @@ pub async fn refresh_all_quotas(
     result
 }
 
+/// 加速复检：配额进入危险区时，30 秒后自动触发一次额外刷新+切号判定
+static ACCELERATED_RECHECK_PENDING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+fn schedule_accelerated_recheck(app: tauri::AppHandle, current_lowest_pct: i32) {
+    use std::sync::atomic::Ordering;
+
+    // 防堆积：同一时间只允许一个加速复检在等待
+    if ACCELERATED_RECHECK_PENDING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    modules::logger::log_info(&format!(
+        "[DynamicSampling] ⏩ 配额进入危险区(lowest={}%)，30 秒后加速复检",
+        current_lowest_pct
+    ));
+
+    let app_clone = app.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        ACCELERATED_RECHECK_PENDING.store(false, Ordering::SeqCst);
+
+        // 检查是否还需要复检（可能已被其他逻辑切号了）
+        if !modules::config::get_user_config().auto_switch_enabled {
+            return;
+        }
+
+        modules::logger::log_info("[DynamicSampling] ⏩ 执行加速复检...");
+
+        let result: Result<(), String> = async {
+            let Some(mut account) =
+                modules::get_current_account().map_err(|e| e.to_string())?
+            else {
+                return Ok(());
+            };
+            let quota = modules::fetch_quota_with_delayed_retry(&mut account, true)
+                .await
+                .map_err(|e| e.to_string())?;
+            modules::update_account_quota(&account.id, quota.clone())
+                .map_err(|e| e.to_string())?;
+
+            match modules::account::run_auto_switch_if_needed().await {
+                Ok(Some(switched)) => {
+                    modules::logger::log_info(&format!(
+                        "[DynamicSampling] ✅ 加速复检切号完成: {}",
+                        switched.email
+                    ));
+                }
+                Ok(None) => {
+                    // 还没触发切号，检查是否需要继续加速
+                    let lowest = quota.models.iter().map(|m| m.percentage).min().unwrap_or(100);
+                    if lowest < 30 {
+                        schedule_accelerated_recheck(app_clone.clone(), lowest);
+                    }
+                }
+                Err(e) => {
+                    modules::logger::log_warn(&format!(
+                        "[DynamicSampling] 加速复检切号失败: {}",
+                        e
+                    ));
+                }
+            }
+
+            Ok(())
+        }
+        .await;
+
+        if let Err(e) = result {
+            modules::logger::log_warn(&format!("[DynamicSampling] 加速复检失败: {}", e));
+        }
+
+        let _ = crate::modules::tray::update_tray_menu(&app_clone);
+    });
+}
+
 #[tauri::command]
 pub async fn refresh_current_quota(app: tauri::AppHandle) -> Result<(), String> {
     let Some(account) = modules::get_current_account().map_err(|e| e.to_string())? else {
@@ -119,7 +194,7 @@ pub async fn refresh_current_quota(app: tauri::AppHandle) -> Result<(), String> 
     let quota = modules::fetch_quota_with_delayed_retry(&mut account, true)
         .await
         .map_err(|e| e.to_string())?;
-    modules::update_account_quota(&account.id, quota).map_err(|e| e.to_string())?;
+    modules::update_account_quota(&account.id, quota.clone()).map_err(|e| e.to_string())?;
 
     let mut switched = false;
     match modules::account::run_auto_switch_if_needed().await {
@@ -139,6 +214,19 @@ pub async fn refresh_current_quota(app: tauri::AppHandle) -> Result<(), String> 
     if !switched {
         if let Err(e) = modules::account::run_quota_alert_if_needed() {
             modules::logger::log_warn(&format!("[QuotaAlert] 当前账号刷新后预警检查失败: {}", e));
+        }
+    }
+
+    // 动态提频：配额低于 30% 且未切号时，30 秒后自动加速复检
+    if !switched && modules::config::get_user_config().auto_switch_enabled {
+        let lowest_pct = quota
+            .models
+            .iter()
+            .map(|m| m.percentage)
+            .min()
+            .unwrap_or(100);
+        if lowest_pct < 30 {
+            schedule_accelerated_recheck(app.clone(), lowest_pct);
         }
     }
 

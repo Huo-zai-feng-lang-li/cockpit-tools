@@ -40,7 +40,9 @@
 
 .codex-account-card.current {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary-light), var(--shadow-md);
+  box-shadow:
+    0 0 0 2px var(--primary-light),
+    var(--shadow-md);
 }
 
 .codex-account-card.selected {
@@ -373,7 +375,7 @@
   align-items: center;
 }
 
-.codex-accounts-page .codex-compact-select input[type='checkbox'] {
+.codex-accounts-page .codex-compact-select input[type="checkbox"] {
   width: 12px;
   height: 12px;
   cursor: pointer;
@@ -603,7 +605,11 @@
 
 .codex-accounts-page .tag-filter-btn.active {
   border-color: rgba(59, 130, 246, 0.4);
-  background: linear-gradient(135deg, rgba(191, 219, 254, 0.45), rgba(153, 246, 228, 0.4));
+  background: linear-gradient(
+    135deg,
+    rgba(191, 219, 254, 0.45),
+    rgba(153, 246, 228, 0.4)
+  );
   color: #0f172a;
 }
 
@@ -814,7 +820,7 @@
 }
 
 .codex-accounts-page .search-box {
-  width: clamp(120px, 11vw, 160px);
+  width: clamp(160px, 14vw, 220px);
   flex-shrink: 0;
 }
 
@@ -842,7 +848,11 @@
   background: rgba(15, 23, 42, 0.86);
 }
 
-[data-theme="dark"] .codex-accounts-page .account-table tbody tr:nth-child(even) {
+[data-theme="dark"]
+  .codex-accounts-page
+  .account-table
+  tbody
+  tr:nth-child(even) {
   background: rgba(15, 23, 42, 0.92);
 }
 
@@ -851,12 +861,13 @@
   color: rgba(226, 232, 240, 0.92);
 }
 
-
 .codex-accounts-page .account-table th {
   background: rgba(15, 23, 42, 0.06);
 }
 
-.codex-accounts-page .account-table th.sticky-action-header.table-action-header {
+.codex-accounts-page
+  .account-table
+  th.sticky-action-header.table-action-header {
   background: var(--bg-tertiary);
   z-index: 30;
   border-left: 1px solid var(--border-light);
@@ -913,7 +924,7 @@
 }
 
 .codex-accounts-page .filter-select::after {
-  content: '';
+  content: "";
   position: absolute;
   right: 10px;
   top: 50%;
@@ -956,7 +967,7 @@
 }
 
 .codex-accounts-page .sort-select::after {
-  content: '';
+  content: "";
   position: absolute;
   right: 10px;
   top: 50%;
@@ -1318,7 +1329,11 @@
 
 /* Dark mode */
 [data-theme="dark"] .codex-account-card {
-  background: linear-gradient(170deg, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.8));
+  background: linear-gradient(
+    170deg,
+    rgba(15, 23, 42, 0.95),
+    rgba(15, 23, 42, 0.8)
+  );
 }
 
 [data-theme="dark"] .codex-accounts-page .message-bar.success {
@@ -1425,7 +1440,11 @@
   gap: 20px;
   padding: 24px;
   background:
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 38%),
+    radial-gradient(
+      circle at top right,
+      rgba(59, 130, 246, 0.12),
+      transparent 38%
+    ),
     linear-gradient(135deg, rgba(15, 23, 42, 0.03), rgba(15, 23, 42, 0.01)),
     var(--bg-card);
   border: 1px solid var(--border);
@@ -1534,7 +1553,11 @@
   padding: 22px;
   border-radius: 20px;
   border: 1px solid rgba(245, 158, 11, 0.24);
-  background: linear-gradient(180deg, rgba(255, 248, 235, 0.92), rgba(255, 255, 255, 0.94));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 248, 235, 0.92),
+    rgba(255, 255, 255, 0.94)
+  );
 }
 
 .codex-wakeup-install-card-embedded {
@@ -1564,9 +1587,21 @@
   max-width: none;
   border: 1px solid rgba(255, 255, 255, 0.65);
   background:
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.1), transparent 34%),
-    radial-gradient(circle at top left, rgba(251, 191, 36, 0.14), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.98));
+    radial-gradient(
+      circle at top right,
+      rgba(14, 165, 233, 0.1),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at top left,
+      rgba(251, 191, 36, 0.14),
+      transparent 30%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.98),
+      rgba(250, 252, 255, 0.98)
+    );
   box-shadow:
     0 28px 60px rgba(15, 23, 42, 0.22),
     0 10px 24px rgba(15, 23, 42, 0.08),
@@ -1599,7 +1634,11 @@
 
 .codex-wakeup-runtime-guide-modal .modal-footer {
   padding: 18px 30px 24px;
-  background: linear-gradient(180deg, rgba(247, 250, 255, 0.2), rgba(240, 247, 255, 0.72));
+  background: linear-gradient(
+    180deg,
+    rgba(247, 250, 255, 0.2),
+    rgba(240, 247, 255, 0.72)
+  );
   border-top: 1px solid rgba(226, 232, 240, 0.78);
 }
 
@@ -1635,8 +1674,16 @@
   padding: 22px 24px;
   border-radius: 24px;
   background:
-    radial-gradient(circle at top left, rgba(255, 219, 172, 0.32), transparent 28%),
-    linear-gradient(135deg, rgba(255, 249, 239, 0.98), rgba(255, 255, 255, 0.96));
+    radial-gradient(
+      circle at top left,
+      rgba(255, 219, 172, 0.32),
+      transparent 28%
+    ),
+    linear-gradient(
+      135deg,
+      rgba(255, 249, 239, 0.98),
+      rgba(255, 255, 255, 0.96)
+    );
   border: 1px solid rgba(251, 191, 36, 0.24);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.8),
@@ -1651,8 +1698,11 @@
   align-items: center;
   justify-content: center;
   color: #b45309;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 239, 213, 0.96));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.8),
+    rgba(255, 239, 213, 0.96)
+  );
   border: 1px solid rgba(251, 191, 36, 0.26);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.85),
@@ -1745,8 +1795,11 @@
   position: relative;
   padding: 18px 16px 16px;
   border-radius: 18px;
-  background:
-    linear-gradient(180deg, rgba(31, 41, 55, 0.98), rgba(15, 23, 42, 0.96));
+  background: linear-gradient(
+    180deg,
+    rgba(31, 41, 55, 0.98),
+    rgba(15, 23, 42, 0.96)
+  );
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 12px 24px rgba(15, 23, 42, 0.18);
@@ -1760,9 +1813,24 @@
   margin-bottom: 14px;
   border-radius: 999px;
   background:
-    radial-gradient(circle at 4px 4px, #fb7185 0, #fb7185 3px, transparent 3.5px),
-    radial-gradient(circle at 17px 4px, #fbbf24 0, #fbbf24 3px, transparent 3.5px),
-    radial-gradient(circle at 30px 4px, #34d399 0, #34d399 3px, transparent 3.5px);
+    radial-gradient(
+      circle at 4px 4px,
+      #fb7185 0,
+      #fb7185 3px,
+      transparent 3.5px
+    ),
+    radial-gradient(
+      circle at 17px 4px,
+      #fbbf24 0,
+      #fbbf24 3px,
+      transparent 3.5px
+    ),
+    radial-gradient(
+      circle at 30px 4px,
+      #34d399 0,
+      #34d399 3px,
+      transparent 3.5px
+    );
 }
 
 .codex-wakeup-install-terminal code {
@@ -2155,7 +2223,8 @@
   background: #7c3aed;
 }
 
-.codex-wakeup-account-chip-quota-secondary .codex-wakeup-account-chip-quota-dot {
+.codex-wakeup-account-chip-quota-secondary
+  .codex-wakeup-account-chip-quota-dot {
   background: #10b981;
 }
 
@@ -2245,9 +2314,21 @@
   width: min(800px, calc(100vw - 32px));
   border: 1px solid rgba(214, 224, 239, 0.9);
   background:
-    radial-gradient(circle at top right, rgba(37, 99, 235, 0.05), transparent 26%),
-    radial-gradient(circle at top left, rgba(16, 185, 129, 0.05), transparent 22%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.985), rgba(249, 251, 255, 0.985));
+    radial-gradient(
+      circle at top right,
+      rgba(37, 99, 235, 0.05),
+      transparent 26%
+    ),
+    radial-gradient(
+      circle at top left,
+      rgba(16, 185, 129, 0.05),
+      transparent 22%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.985),
+      rgba(249, 251, 255, 0.985)
+    );
   box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
 }
 
@@ -2338,7 +2419,11 @@
   justify-content: space-between;
   gap: 12px;
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .codex-wakeup-single-select-trigger:hover:not(:disabled) {
@@ -2391,7 +2476,9 @@
 .codex-wakeup-single-select-chevron {
   flex-shrink: 0;
   color: var(--text-muted);
-  transition: transform 0.2s ease, color 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    color 0.2s ease;
 }
 
 .codex-wakeup-single-select-chevron.open {
@@ -2484,7 +2571,10 @@
   background: var(--bg-secondary);
   color: var(--text-primary);
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease;
 }
 
 .codex-wakeup-segmented button.active,
@@ -2698,7 +2788,11 @@
   font-size: 12px;
   cursor: pointer;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
-  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .codex-wakeup-results-filter-chip.tone-all {
@@ -2812,17 +2906,29 @@
 
 .codex-wakeup-execution-row.is-success {
   border-color: rgba(187, 247, 208, 0.98);
-  background: linear-gradient(180deg, rgba(248, 255, 251, 0.96), rgba(255, 255, 255, 0.9));
+  background: linear-gradient(
+    180deg,
+    rgba(248, 255, 251, 0.96),
+    rgba(255, 255, 255, 0.9)
+  );
 }
 
 .codex-wakeup-execution-row.is-error {
   border-color: rgba(254, 202, 202, 0.98);
-  background: linear-gradient(180deg, rgba(255, 249, 249, 0.98), rgba(255, 255, 255, 0.92));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 249, 249, 0.98),
+    rgba(255, 255, 255, 0.92)
+  );
 }
 
 .codex-wakeup-execution-row.is-running {
   border-color: rgba(191, 219, 254, 0.98);
-  background: linear-gradient(180deg, rgba(246, 250, 255, 0.98), rgba(255, 255, 255, 0.92));
+  background: linear-gradient(
+    180deg,
+    rgba(246, 250, 255, 0.98),
+    rgba(255, 255, 255, 0.92)
+  );
 }
 
 .codex-wakeup-execution-row-head {
@@ -2918,8 +3024,11 @@
   padding: 13px 15px;
   border-radius: 12px;
   border: 1px solid rgba(226, 232, 240, 0.98);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(251, 253, 255, 0.94));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.96),
+    rgba(251, 253, 255, 0.94)
+  );
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
 }
 
@@ -3054,8 +3163,16 @@
 [data-theme="dark"] .codex-wakeup-results-modal {
   border-color: rgba(148, 163, 184, 0.2);
   background:
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 28%),
-    radial-gradient(circle at top left, rgba(20, 184, 166, 0.08), transparent 24%),
+    radial-gradient(
+      circle at top right,
+      rgba(59, 130, 246, 0.12),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at top left,
+      rgba(20, 184, 166, 0.08),
+      transparent 24%
+    ),
     linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(15, 23, 42, 0.96));
   box-shadow:
     0 28px 64px rgba(2, 6, 23, 0.52),
@@ -3183,17 +3300,29 @@
 
 [data-theme="dark"] .codex-wakeup-execution-row.is-success {
   border-color: rgba(74, 222, 128, 0.24);
-  background: linear-gradient(180deg, rgba(20, 83, 45, 0.22), rgba(15, 23, 42, 0.58));
+  background: linear-gradient(
+    180deg,
+    rgba(20, 83, 45, 0.22),
+    rgba(15, 23, 42, 0.58)
+  );
 }
 
 [data-theme="dark"] .codex-wakeup-execution-row.is-error {
   border-color: rgba(248, 113, 113, 0.24);
-  background: linear-gradient(180deg, rgba(127, 29, 29, 0.2), rgba(15, 23, 42, 0.58));
+  background: linear-gradient(
+    180deg,
+    rgba(127, 29, 29, 0.2),
+    rgba(15, 23, 42, 0.58)
+  );
 }
 
 [data-theme="dark"] .codex-wakeup-execution-row.is-running {
   border-color: rgba(96, 165, 250, 0.24);
-  background: linear-gradient(180deg, rgba(30, 64, 175, 0.2), rgba(15, 23, 42, 0.58));
+  background: linear-gradient(
+    180deg,
+    rgba(30, 64, 175, 0.2),
+    rgba(15, 23, 42, 0.58)
+  );
 }
 
 [data-theme="dark"] .codex-wakeup-execution-row-title,
@@ -3207,8 +3336,11 @@
 
 [data-theme="dark"] .codex-wakeup-history-run-card {
   border-color: rgba(148, 163, 184, 0.16);
-  background:
-    linear-gradient(180deg, rgba(30, 41, 59, 0.86), rgba(15, 23, 42, 0.82));
+  background: linear-gradient(
+    180deg,
+    rgba(30, 41, 59, 0.86),
+    rgba(15, 23, 42, 0.82)
+  );
   box-shadow: 0 12px 28px rgba(2, 6, 23, 0.28);
 }
 
@@ -3274,8 +3406,16 @@
 [data-theme="dark"] .codex-wakeup-runtime-guide-modal {
   border-color: rgba(148, 163, 184, 0.18);
   background:
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.1), transparent 34%),
-    radial-gradient(circle at top left, rgba(251, 191, 36, 0.12), transparent 30%),
+    radial-gradient(
+      circle at top right,
+      rgba(14, 165, 233, 0.1),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at top left,
+      rgba(251, 191, 36, 0.12),
+      transparent 30%
+    ),
     linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(15, 23, 42, 0.96));
   box-shadow:
     0 28px 60px rgba(2, 6, 23, 0.56),
@@ -3303,7 +3443,10 @@
   border-top-color: rgba(148, 163, 184, 0.14);
 }
 
-[data-theme="dark"] .codex-wakeup-runtime-guide-modal .modal-footer .btn-secondary {
+[data-theme="dark"]
+  .codex-wakeup-runtime-guide-modal
+  .modal-footer
+  .btn-secondary {
   background: rgba(30, 41, 59, 0.9);
   border-color: rgba(148, 163, 184, 0.18);
   color: #e2e8f0;
@@ -3311,7 +3454,11 @@
 
 [data-theme="dark"] .codex-wakeup-runtime-guide-hero {
   background:
-    radial-gradient(circle at top left, rgba(251, 191, 36, 0.16), transparent 28%),
+    radial-gradient(
+      circle at top left,
+      rgba(251, 191, 36, 0.16),
+      transparent 28%
+    ),
     linear-gradient(135deg, rgba(30, 41, 59, 0.94), rgba(15, 23, 42, 0.88));
   border-color: rgba(251, 191, 36, 0.2);
   box-shadow:
@@ -3320,7 +3467,11 @@
 }
 
 [data-theme="dark"] .codex-wakeup-runtime-guide-icon {
-  background: linear-gradient(180deg, rgba(30, 41, 59, 0.92), rgba(69, 26, 3, 0.5));
+  background: linear-gradient(
+    180deg,
+    rgba(30, 41, 59, 0.92),
+    rgba(69, 26, 3, 0.5)
+  );
   border-color: rgba(251, 191, 36, 0.2);
   color: #fbbf24;
   box-shadow:
@@ -3447,7 +3598,9 @@
 }
 
 [data-theme="dark"] .codex-wakeup-selector.selected,
-[data-theme="dark"] .codex-wakeup-single-select.open .codex-wakeup-single-select-trigger,
+[data-theme="dark"]
+  .codex-wakeup-single-select.open
+  .codex-wakeup-single-select-trigger,
 [data-theme="dark"] .codex-wakeup-single-select-trigger.selected,
 [data-theme="dark"] .codex-wakeup-segmented button.active,
 [data-theme="dark"] .codex-wakeup-chip-button.active {
