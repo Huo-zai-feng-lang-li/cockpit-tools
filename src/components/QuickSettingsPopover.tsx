@@ -1914,7 +1914,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                             "切号时机由 4 道防线保障：\n\n① 加速盯梢：基础检测频率与全局配额刷新一致，配额跌破「速率预判水位」后每 30s 加速复检。\n② 速率预判：配额低于「速率预判水位」时估算消耗速度，预测 90s 内耗尽就提前切。\n③ 429 即切：IDE 报「配额超限」时瞬时切号。\n④ 兜底阈值：前三道未触发时，跌到此处设定的百分比就切。\n\n不会过早切：高配额阶段完全不干扰，仅在低水位区才启动预判。\n不会漏切：③ 429 即切 + ④ 阈值兜底双重保险，最坏仅一次短暂闪断后即时切换。\n\n💡 建议设 0%，榨干每一滴免费额度。"
                           }
                         >
-                          !
+                          Tip
                         </span>
                       </div>
                       <div className="qs-row-control">
@@ -1982,7 +1982,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                             "只有当配额低于此百分比时，才会启用速率预判（估算按当前消耗速度还能用多久）。\n\n💡 调低此值（如 10%）：可以榨干账号的最后一点用量，避免在配额还有 20% 时就被提前切走。\n💡 调高此值（如 30%）：预先储备更多缓冲余量，让系统更早介入判定。"
                           }
                         >
-                          !
+                          Tip
                         </span>
                       </div>
                       <div className="qs-row-control">

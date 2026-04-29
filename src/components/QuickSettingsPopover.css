@@ -489,29 +489,40 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 17px;
-  height: 17px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #f59e0b, #f97316);
-  color: #fff;
-  font-size: 10px;
-  font-style: italic;
-  font-weight: 900;
+  padding: 0 6px;
+  height: 18px;
+  border-radius: 9px;
+  background: linear-gradient(
+    135deg,
+    #6366f1,
+    #8b5cf6
+  ); /* Sleek Indigo-Purple */
+  color: #ffffff;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 10.5px;
+  font-style: normal; /* Force normal to override any global italic */
+  font-weight: 600;
+  letter-spacing: 0.02em;
   line-height: 1;
   cursor: help;
   flex-shrink: 0;
   user-select: none;
-  box-shadow: 0 1px 4px rgba(245, 158, 11, 0.45);
+  box-shadow:
+    0 2px 6px rgba(99, 102, 241, 0.35),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2); /* Premium 3D lighting effect */
   transition:
-    background 0.18s,
-    box-shadow 0.18s,
-    transform 0.15s;
+    background 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .qs-info-icon:hover {
-  background: linear-gradient(135deg, #d97706, #ea580c);
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.6);
-  transform: scale(1.18);
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
+  transform: scale(1.15) translateY(-1px);
 }
 
 /* Custom tooltip bubble */
