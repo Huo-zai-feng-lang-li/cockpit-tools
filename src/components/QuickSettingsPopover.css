@@ -535,14 +535,14 @@
   transition:
     opacity 0.18s,
     transform 0.18s;
-  transform-origin: bottom left;
+  transform-origin: left center;
   z-index: 99999;
 }
 
 .qs-info-icon::before {
   content: attr(data-tip);
-  bottom: calc(100% + 8px);
-  left: -4px; /* anchor slightly to the left of the badge */
+  top: -10px; /* Shift slightly to align text nicely */
+  left: calc(100% + 8px); /* Pop to the right */
   width: max-content;
   max-width: 310px;
   padding: 9px 12px;
@@ -556,48 +556,29 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   text-align: left;
-  transform: translateY(-4px);
+  transform: translateX(4px);
 }
 
-/* Caret pointing down */
+/* Caret pointing left */
 .qs-info-icon::after {
   content: "";
   width: 0;
   height: 0;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 6px solid rgba(24, 24, 28, 0.96);
-  border-bottom: none;
-  bottom: calc(100% + 2px);
-  left: 12px; /* point at the center of the Tip badge */
-  transform: translateY(-4px);
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-right: 6px solid rgba(24, 24, 28, 0.96);
+  border-left: none;
+  top: 50%;
+  left: calc(100% + 2px);
+  transform: translateY(-50%) translateX(4px);
 }
 
-.qs-info-icon:hover::before,
+.qs-info-icon:hover::before {
+  opacity: 1;
+  transform: translateX(0);
+}
+
 .qs-info-icon:hover::after {
   opacity: 1;
-  transform: translateY(0);
-}
-
-/* 
-  Fix for top-row items:
-  Since .qs-body has overflow-y: auto, any upward tooltip in the first row 
-  will be clipped by the top boundary. We force the first section's tooltip to point down. 
-*/
-.qs-body > .qs-section:first-child .qs-info-icon::before {
-  top: calc(100% + 8px);
-  bottom: auto;
-  transform: translateY(4px);
-  transform-origin: top left;
-}
-.qs-body > .qs-section:first-child .qs-info-icon::after {
-  top: calc(100% + 2px);
-  bottom: auto;
-  border-bottom: 6px solid rgba(24, 24, 28, 0.96);
-  border-top: none;
-  transform: translateY(4px);
-}
-.qs-body > .qs-section:first-child .qs-info-icon:hover::before,
-.qs-body > .qs-section:first-child .qs-info-icon:hover::after {
-  transform: translateY(0);
+  transform: translateY(-50%) translateX(0);
 }
