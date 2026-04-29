@@ -1250,6 +1250,14 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
               <div className="qs-section-header">
                 <RefreshCw size={15} />
                 <span>{getRefreshLabel()}</span>
+                {type === "antigravity" && (
+                  <span
+                    className="qs-info-icon"
+                    title="【独立机制说明】&#10;&#10;此处的“自动刷新”控制的是在界面上更新所有保存账号的面板数据。&#10;&#10;注意：开启「自动切号」后，系统内部会额外独立运行一个高频（最小 30s）的局部监控协程，仅盯着当前账号。&#10;&#10;👉 这两套机制完全独立！建议此处全局刷新保持 5 或 10 分钟以上，切勿设为1分钟，否则频繁请求所有账号极易导致大面积限流（Rate Limit）。"
+                  >
+                    !
+                  </span>
+                )}
               </div>
               <div className="qs-field-group">
                 {showRefreshInput ? (
