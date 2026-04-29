@@ -189,10 +189,6 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const [codexShowCodeReviewQuota, setCodexShowCodeReviewQuota] = useState(
     isCodexCodeReviewQuotaVisibleByDefault,
   );
-  const [
-    antigravitySeamlessSwitchUnlocked,
-    setAntigravitySeamlessSwitchUnlocked,
-  ] = useState(isAntigravitySeamlessSwitchFeatureUnlocked);
   const modalRef = useRef<HTMLDivElement>(null);
   const refreshPresets = ["-1", "2", "5", "10", "15"];
   const thresholdPresets = ["0", "20", "40", "60"];
@@ -203,32 +199,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     if (isOpen) {
       loadConfig();
       setCodexShowCodeReviewQuota(isCodexCodeReviewQuotaVisibleByDefault());
-      setAntigravitySeamlessSwitchUnlocked(
-        isAntigravitySeamlessSwitchFeatureUnlocked(),
-      );
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    const handleFeatureUnlockChanged = (event: Event) => {
-      const detail = (event as CustomEvent<FeatureUnlockChangedDetail>).detail;
-      if (!detail || detail.feature !== "antigravity.seamless_switch") {
-        return;
-      }
-      setAntigravitySeamlessSwitchUnlocked(Boolean(detail.unlocked));
-    };
-
-    window.addEventListener(
-      FEATURE_UNLOCK_CHANGED_EVENT,
-      handleFeatureUnlockChanged as EventListener,
-    );
-    return () => {
-      window.removeEventListener(
-        FEATURE_UNLOCK_CHANGED_EVENT,
-        handleFeatureUnlockChanged as EventListener,
-      );
-    };
-  }, []);
 
   // Close on Escape
   useEffect(() => {
