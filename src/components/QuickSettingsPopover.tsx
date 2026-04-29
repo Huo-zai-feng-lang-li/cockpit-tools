@@ -62,6 +62,7 @@ interface GeneralConfig {
   auto_switch_threshold: number;
   auto_switch_scope_mode: string;
   auto_switch_selected_group_ids: string[];
+  auto_switch_velocity_threshold: number;
   codex_auto_switch_enabled: boolean;
   codex_auto_switch_primary_threshold: number;
   codex_auto_switch_secondary_threshold: number;
@@ -157,6 +158,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const [error, setError] = useState<string | null>(null);
   const [refreshEditing, setRefreshEditing] = useState(false);
   const [thresholdEditing, setThresholdEditing] = useState(false);
+  const [velocityThresholdEditing, setVelocityThresholdEditing] =
+    useState(false);
+  const [customVelocityThreshold, setCustomVelocityThreshold] = useState("");
   const [quotaAlertThresholdEditing, setQuotaAlertThresholdEditing] =
     useState(false);
   const [customRefresh, setCustomRefresh] = useState("");
@@ -192,6 +196,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const refreshPresets = ["-1", "2", "5", "10", "15"];
   const thresholdPresets = ["0", "20", "40", "60"];
+  const velocityThresholdPresets = ["10", "15", "20", "30"];
 
   // Load config when modal opens
   useEffect(() => {
@@ -390,6 +395,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           autoSwitchThreshold: merged.auto_switch_threshold,
           autoSwitchScopeMode: merged.auto_switch_scope_mode,
           autoSwitchSelectedGroupIds: merged.auto_switch_selected_group_ids,
+          autoSwitchVelocityThreshold: merged.auto_switch_velocity_threshold,
           codexAutoSwitchEnabled: merged.codex_auto_switch_enabled,
           codexAutoSwitchPrimaryThreshold:
             merged.codex_auto_switch_primary_threshold,
@@ -814,6 +820,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     ? thresholdPresets.includes(String(config.auto_switch_threshold))
     : true;
   const showThresholdInput = thresholdEditing;
+  const showVelocityThresholdInput = velocityThresholdEditing;
+  const isVelocityThresholdPreset = config
+    ? velocityThresholdPresets.includes(
+        String(config.auto_switch_velocity_threshold),
+      )
+    : true;
   const autoSwitchScopeMode =
     config?.auto_switch_scope_mode === "selected_groups"
       ? "selected_groups"
@@ -896,6 +908,31 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     }
     setCustomThreshold("");
     setThresholdEditing(false);
+  };
+
+  const handleVelocityThresholdSelectChange = (val: string) => {
+    if (val === "custom") {
+      setCustomVelocityThreshold(
+        String(config?.auto_switch_velocity_threshold ?? 15),
+      );
+      setVelocityThresholdEditing(true);
+    } else {
+      setCustomVelocityThreshold("");
+      setVelocityThresholdEditing(false);
+      saveConfig({ auto_switch_velocity_threshold: parseInt(val, 10) });
+    }
+  };
+
+  const handleCustomVelocityThresholdApply = () => {
+    const parsed = parseInt(customVelocityThreshold, 10);
+    if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+      saveConfig({ auto_switch_velocity_threshold: parsed });
+      setCustomVelocityThreshold("");
+      setVelocityThresholdEditing(false);
+      return;
+    }
+    setCustomVelocityThreshold("");
+    setVelocityThresholdEditing(false);
   };
 
   const handleAutoSwitchScopeModeChange = (value: string) => {
@@ -1874,7 +1911,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         <span
                           className="qs-info-icon"
                           data-tip={
-                            "切号时机由 4 道防线保障，不会漏掉任何一次配额告急：\n\n① 加速盯梢：配额跌破 30% 后，每 30s 就来检查一次，不再等全局刷新慢慢来。\n② 提前预判：系统会估算「按现在的用量速度，还能撑多久」—— 预计 90s 内就耗尽的话，提前切，不等到真正用完。\n③ 429 即切：IDE 报「配额超限」错误时，立即触发切号，不浪费哪怕一秒。\n④ 兜底阈值：前三道没捞到时，跌到您设定的百分比就切，这是最后一道保险。\n\n💡 建议设 0%，让前三道防线全权接管，把每个账号榨得一滴不剩。"
+                            "切号时机由 4 道防线保障：\n\n① 加速盯梢：基础检测频率与全局配额刷新一致，配额跌破「速率预判水位」后每 30s 加速复检。\n② 速率预判：配额低于「速率预判水位」时估算消耗速度，预测 90s 内耗尽就提前切。\n③ 429 即切：IDE 报「配额超限」时瞬时切号。\n④ 兜底阈值：前三道未触发时，跌到此处设定的百分比就切。\n\n不会过早切：高配额阶段完全不干扰，仅在低水位区才启动预判。\n不会漏切：③ 429 即切 + ④ 阈值兜底双重保险，最坏仅一次短暂闪断后即时切换。\n\n💡 建议设 0%，榨干每一滴免费额度。"
                           }
                         >
                           !
@@ -1927,6 +1964,80 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                             <option value="20">20%</option>
                             <option value="40">40%</option>
                             <option value="60">60%</option>
+                            <option value="custom">
+                              {t("quickSettings.customInput", "自定义")}
+                            </option>
+                          </select>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 新增：速率预判激活水位 */}
+                    <div className="qs-row">
+                      <div className="qs-row-label">
+                        <span>速率预判水位</span>
+                        <span
+                          className="qs-info-icon"
+                          data-tip={
+                            "只有当配额低于此百分比时，才会启用速率预判（估算按当前消耗速度还能用多久）。\n\n💡 调低此值（如 10%）：可以榨干账号的最后一点用量，避免在配额还有 20% 时就被提前切走。\n💡 调高此值（如 30%）：预先储备更多缓冲余量，让系统更早介入判定。"
+                          }
+                        >
+                          !
+                        </span>
+                      </div>
+                      <div className="qs-row-control">
+                        {showVelocityThresholdInput ? (
+                          <div className="qs-inline-input">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              className="qs-select qs-select--input-mode qs-select--with-unit"
+                              value={customVelocityThreshold}
+                              placeholder={t(
+                                "quickSettings.inputPercent",
+                                "输入百分比",
+                              )}
+                              onChange={(e) =>
+                                setCustomVelocityThreshold(
+                                  e.target.value.replace(/[^\d]/g, ""),
+                                )
+                              }
+                              onBlur={handleCustomVelocityThresholdApply}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  handleCustomVelocityThresholdApply();
+                                }
+                              }}
+                            />
+                            <span className="qs-input-unit">%</span>
+                          </div>
+                        ) : (
+                          <select
+                            className="qs-select"
+                            value={String(
+                              config.auto_switch_velocity_threshold,
+                            )}
+                            onChange={(e) =>
+                              handleVelocityThresholdSelectChange(
+                                e.target.value,
+                              )
+                            }
+                          >
+                            {!isVelocityThresholdPreset && (
+                              <option
+                                value={String(
+                                  config.auto_switch_velocity_threshold,
+                                )}
+                              >
+                                {config.auto_switch_velocity_threshold}%
+                              </option>
+                            )}
+                            <option value="10">10%</option>
+                            <option value="15">15%（推荐）</option>
+                            <option value="20">20%</option>
+                            <option value="30">30%</option>
                             <option value="custom">
                               {t("quickSettings.customInput", "自定义")}
                             </option>

@@ -137,6 +137,8 @@ pub struct GeneralConfig {
     pub auto_switch_scope_mode: String,
     /// 自动切号指定模型分组（分组 ID）
     pub auto_switch_selected_group_ids: Vec<String>,
+    /// 速率预判激活水位（百分比），配额低于此值时启用速率预判
+    pub auto_switch_velocity_threshold: i32,
     /// 是否启用 Codex 自动切号
     pub codex_auto_switch_enabled: bool,
     /// Codex primary_window 自动切号阈值（百分比）
@@ -386,6 +388,7 @@ pub fn save_network_config(
         auto_switch_threshold: current.auto_switch_threshold,
         auto_switch_scope_mode: current.auto_switch_scope_mode,
         auto_switch_selected_group_ids: current.auto_switch_selected_group_ids,
+        auto_switch_velocity_threshold: current.auto_switch_velocity_threshold,
         codex_auto_switch_enabled: current.codex_auto_switch_enabled,
         codex_auto_switch_primary_threshold: current.codex_auto_switch_primary_threshold,
         codex_auto_switch_secondary_threshold: current.codex_auto_switch_secondary_threshold,
@@ -489,6 +492,7 @@ pub fn get_general_config() -> Result<GeneralConfig, String> {
         auto_switch_threshold: user_config.auto_switch_threshold,
         auto_switch_scope_mode: user_config.auto_switch_scope_mode,
         auto_switch_selected_group_ids: user_config.auto_switch_selected_group_ids,
+        auto_switch_velocity_threshold: user_config.auto_switch_velocity_threshold,
         codex_auto_switch_enabled: user_config.codex_auto_switch_enabled,
         codex_auto_switch_primary_threshold: user_config.codex_auto_switch_primary_threshold,
         codex_auto_switch_secondary_threshold: user_config.codex_auto_switch_secondary_threshold,
@@ -595,6 +599,7 @@ pub fn save_general_config(
     auto_switch_threshold: Option<i32>,
     auto_switch_scope_mode: Option<String>,
     auto_switch_selected_group_ids: Option<Vec<String>>,
+    auto_switch_velocity_threshold: Option<i32>,
     codex_auto_switch_enabled: Option<bool>,
     codex_auto_switch_primary_threshold: Option<i32>,
     codex_auto_switch_secondary_threshold: Option<i32>,
@@ -779,6 +784,9 @@ pub fn save_general_config(
             .unwrap_or(current.auto_switch_scope_mode),
         auto_switch_selected_group_ids: auto_switch_selected_group_ids
             .unwrap_or(current.auto_switch_selected_group_ids),
+        auto_switch_velocity_threshold: auto_switch_velocity_threshold
+            .unwrap_or(current.auto_switch_velocity_threshold)
+            .clamp(0, 100),
         codex_auto_switch_enabled: codex_auto_switch_enabled
             .unwrap_or(current.codex_auto_switch_enabled),
         codex_auto_switch_primary_threshold: codex_auto_switch_primary_threshold

@@ -984,7 +984,8 @@ const VELOCITY_SAFETY_MARGIN_SECS: f64 = 90.0;
 /// 最小消耗速率阈值（低于此值视为无显著消耗，避免噪声误判）
 const VELOCITY_MIN_RATE_PER_SEC: f64 = 0.05;
 /// 安全水位门槛：仅当配额低于此百分比时才启用速率预判（避免高配额时误判）
-const VELOCITY_ACTIVATION_THRESHOLD: f64 = 30.0;
+/// 实际值从用户配置 auto_switch_velocity_threshold 读取，此常量仅作初始默认值
+const VELOCITY_ACTIVATION_THRESHOLD_DEFAULT: f64 = 15.0;
 
 /// 上一次配额快照（用于计算消耗速率）
 static QUOTA_VELOCITY_SNAPSHOT: std::sync::LazyLock<
@@ -1051,7 +1052,11 @@ fn evaluate_velocity_prediction(
         let current_pct = current.percentage as f64;
 
         // 安全水位门槛：配额充足时不启用速率预判
-        if current_pct > VELOCITY_ACTIVATION_THRESHOLD {
+        let velocity_activation_threshold = {
+            let cfg = crate::modules::config::get_user_config();
+            cfg.auto_switch_velocity_threshold.clamp(0, 100) as f64
+        };
+        if current_pct > velocity_activation_threshold {
             continue;
         }
 

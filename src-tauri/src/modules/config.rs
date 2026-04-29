@@ -211,6 +211,9 @@ pub struct UserConfig {
     /// 自动切号指定模型分组（分组 ID）
     #[serde(default = "default_auto_switch_selected_group_ids")]
     pub auto_switch_selected_group_ids: Vec<String>,
+    /// 速率预判激活水位（百分比），配额低于此值时才启用速率预判
+    #[serde(default = "default_auto_switch_velocity_threshold")]
+    pub auto_switch_velocity_threshold: i32,
     /// 是否启用 Codex 自动切号
     #[serde(default = "default_codex_auto_switch_enabled")]
     pub codex_auto_switch_enabled: bool,
@@ -505,6 +508,9 @@ fn default_auto_switch_scope_mode() -> String {
 fn default_auto_switch_selected_group_ids() -> Vec<String> {
     Vec::new()
 }
+fn default_auto_switch_velocity_threshold() -> i32 {
+    15
+}
 fn default_codex_auto_switch_enabled() -> bool {
     false
 }
@@ -661,6 +667,7 @@ impl Default for UserConfig {
             auto_switch_threshold: default_auto_switch_threshold(),
             auto_switch_scope_mode: default_auto_switch_scope_mode(),
             auto_switch_selected_group_ids: default_auto_switch_selected_group_ids(),
+            auto_switch_velocity_threshold: default_auto_switch_velocity_threshold(),
             codex_auto_switch_enabled: default_codex_auto_switch_enabled(),
             codex_auto_switch_primary_threshold: default_codex_auto_switch_primary_threshold(),
             codex_auto_switch_secondary_threshold: default_codex_auto_switch_secondary_threshold(),

@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.26] - 2026-04-29
+
+### Added
+
+- **Velocity prediction threshold configurable**: The velocity-based exhaustion prediction activation threshold is now a user-configurable option (default 15%) in Quick Settings, allowing fine-tuned control over when predictive switching engages.
+
+### Changed
+
+- **Auto-switch reason display restructured**: Switch history now renders the auto-switch reason as a multi-line JSX layout (rule / scope / hit groups / candidates) for improved readability.
+- **Auto-switch tooltip updated**: Tooltip now explains the 4-layer defense system with clear "won't switch too early / won't miss a switch" safety guarantees and references the configurable velocity threshold.
+- **Velocity prediction activation lowered**: Default activation threshold reduced from 30% to 15%, preventing premature account rotation while maintaining safety margins.
+
+### Fixed
+
+- **`velocity_predicted_exhaustion` rule display**: Fixed the switch history showing "未知" for velocity-predicted switches; now correctly displays "速率预判提前拦截".
+
+---
+
 ## [0.20.25] - 2026-04-29
 
 ### Changed

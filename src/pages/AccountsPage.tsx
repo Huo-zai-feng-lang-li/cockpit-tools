@@ -1399,6 +1399,12 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
         "模型分组低于阈值",
       );
     }
+    if (rule === "velocity_predicted_exhaustion") {
+      return t(
+        "accounts.switchHistory.autoReasonRuleVelocityPredicted",
+        "速率预判提前拦截",
+      );
+    }
     return t("accounts.switchHistory.triggerUnknown", "未知");
   };
 
@@ -1414,27 +1420,43 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
 
   const formatSwitchHistoryAutoReason = (
     reason?: accountService.AntigravityAutoSwitchReason | null,
-  ) => {
+  ): React.ReactNode => {
     if (!reason) {
-      return t(
-        "accounts.switchHistory.autoReasonUnknown",
-        "自动切号触发，未记录详细原因",
+      return (
+        <span style={{ color: "var(--text-tertiary)" }}>
+          {t(
+            "accounts.switchHistory.autoReasonUnknown",
+            "自动切号触发，未记录详细原因",
+          )}
+        </span>
       );
     }
     const hitGroupText = (reason.hitGroups || [])
       .map((group) => `${group.groupName}=${group.percentage}%`)
       .join("、");
     const selectedGroupText = (reason.selectedGroupNames || []).join("、");
-    return t("accounts.switchHistory.autoReason", {
-      rule: formatSwitchHistoryAutoRule(reason.rule),
-      threshold: reason.threshold,
-      scope: formatSwitchHistoryAutoScope(reason.scopeMode),
-      selectedGroups: selectedGroupText || "-",
-      hitGroups: hitGroupText || "-",
-      candidates: reason.candidateCount ?? 0,
-      defaultValue:
-        "规则：{{rule}}；阈值：{{threshold}}%；范围：{{scope}}；监控分组：{{selectedGroups}}；命中分组：{{hitGroups}}；候选账号：{{candidates}}",
-    });
+    const ruleLabel = formatSwitchHistoryAutoRule(reason.rule);
+    const scopeLabel = formatSwitchHistoryAutoScope(reason.scopeMode);
+    return (
+      <span>
+        <span>规则：{ruleLabel}</span>
+        <span style={{ marginLeft: 8 }}>阈值：{reason.threshold}%</span>
+        <br />
+        <span>范围：{scopeLabel}</span>
+        {selectedGroupText && selectedGroupText !== "-" && (
+          <span style={{ marginLeft: 8 }}>监控：{selectedGroupText}</span>
+        )}
+        <br />
+        {hitGroupText && hitGroupText !== "-" && (
+          <span>命中分组：{hitGroupText}</span>
+        )}
+        <span
+          style={{ marginLeft: hitGroupText && hitGroupText !== "-" ? 8 : 0 }}
+        >
+          候选账号：{reason.candidateCount ?? 0}
+        </span>
+      </span>
+    );
   };
 
   const handleImportFromTools = async () => {
@@ -3905,19 +3927,23 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                           defaultValue: "触发端：{{origin}}",
                         })}
                       </div>
-                      {item.triggerType === "auto" && (
+                      {item.triggerType === "auto" && item.autoSwitchReason && (
                         <div
                           style={{
                             fontSize: 12,
                             color: "var(--text-secondary)",
+                            lineHeight: 1.8,
                           }}
                         >
-                          {t("accounts.switchHistory.autoReasonLabel", {
-                            reason: formatSwitchHistoryAutoReason(
-                              item.autoSwitchReason,
-                            ),
-                            defaultValue: "自动原因：{{reason}}",
-                          })}
+                          <span
+                            style={{
+                              color: "var(--text-tertiary)",
+                              marginRight: 4,
+                            }}
+                          >
+                            自动原因：
+                          </span>
+                          {formatSwitchHistoryAutoReason(item.autoSwitchReason)}
                         </div>
                       )}
                       <div
