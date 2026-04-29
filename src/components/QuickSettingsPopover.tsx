@@ -1253,7 +1253,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 {type === "antigravity" && (
                   <span
                     className="qs-info-icon"
-                    title="仅用于界面更新「所有历史账号」的面板数据。&#10;不影响自动切号！（切号引擎后台自带独立 30s 探测雷达）"
+                    title="仅用于界面更新「所有历史账号」的面板数据。&#10;完全不影响自动切号！（切号引擎有独立的动态提频追踪策略）"
                   >
                     !
                   </span>
@@ -1871,7 +1871,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         </span>
                         <span
                           className="qs-info-icon"
-                          title="后台独立探测：自带雷达30s高频刷新监控（伴有提前预判与熔断抓取）。&#10;&#10;推荐 0% 兜底线，榨干每滴配额。"
+                          title="后台采用四层智能拦截：动态提频(按配额余量智能加速)、速率预判(斜率预警)、429熔断(被限流即切)与阈值兜底。&#10;&#10;推荐设为 0%，依靠混合防御榨干每滴配额。"
                         >
                           !
                         </span>
