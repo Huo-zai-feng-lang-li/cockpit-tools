@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.27] - 2026-04-29
+
+### Fixed
+
+- **Tooltip overflow in Settings**: Fixed an issue where long tooltip text (like the auto-switch defense guarantees) inside the Quick Settings popover was being cut off by the left boundary of the modal window by shifting its anchor position.
+
+---
+
 ## [0.20.26] - 2026-04-29
 
 ### Added
