@@ -4,7 +4,14 @@ English · [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to Cockpit Tools will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+## The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [0.20.24] - 2026-04-29
+
+### Changed
+
+- **Settings transparency improved**: Clarified the independence of global auto-refresh scanning and the backend local radar polling mechanism via UI tooltips.
+- **Default auto-switch threshold optimized to 0%**: Maximizes account utility by shifting the defensive strategy entirely to predictive exhaustion logic and 429-fallback mechanics.
 
 ---
 
