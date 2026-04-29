@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.29] - 2026-04-29
+
+### Changed
+
+- **Tooltip copy refinement**: Updated the tooltip for the velocity prediction threshold to explicitly clarify that it now governs both “Velocity Prediction” and “Accelerated Quota Tracking” mechanisms simultaneously.
+
+---
+
 ## [0.20.28] - 2026-04-29
 
 ### Changed
