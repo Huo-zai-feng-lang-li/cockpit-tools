@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.32] - 2026-04-29
+
+### Changed
+
+- **Seamless switch UI now always visible**: Removed the hidden feature-unlock gate for «Seamless Dual-Channel Switch» and «Switch History». Both features are now available to all users without requiring the secret tap sequence on the About page.
+
+---
+
 ## [0.20.29] - 2026-04-29
 
 ### Changed

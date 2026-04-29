@@ -3392,16 +3392,14 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
                 className={refreshingAll ? "loading-spinner" : ""}
               />
             </button>
-            {antigravitySeamlessSwitchUnlocked && (
-              <button
-                className="btn btn-secondary icon-only"
-                onClick={openSwitchHistoryModal}
-                title={t("accounts.switchHistory.title", "切换记录")}
-                aria-label={t("accounts.switchHistory.title", "切换记录")}
-              >
-                <History size={14} />
-              </button>
-            )}
+            <button
+              className="btn btn-secondary icon-only"
+              onClick={openSwitchHistoryModal}
+              title={t("accounts.switchHistory.title", "切换记录")}
+              aria-label={t("accounts.switchHistory.title", "切换记录")}
+            >
+              <History size={14} />
+            </button>
             <button
               className="btn btn-secondary icon-only"
               onClick={togglePrivacyMode}

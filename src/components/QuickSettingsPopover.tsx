@@ -1839,44 +1839,40 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   <span>{t("quickSettings.autoSwitch.title", "自动切号")}</span>
                 </div>
 
-                {antigravitySeamlessSwitchUnlocked && (
-                  <>
-                    <div className="qs-row">
-                      <div className="qs-row-label">
-                        <span>
-                          {t(
-                            "settings.general.antigravityDualSwitchNoRestart",
-                            "无感双通道切号（不重启）",
-                          )}
-                        </span>
-                      </div>
-                      <div className="qs-row-control">
-                        <label className="qs-switch">
-                          <input
-                            type="checkbox"
-                            checked={
-                              config.antigravity_dual_switch_no_restart_enabled
-                            }
-                            onChange={(e) =>
-                              saveConfig({
-                                antigravity_dual_switch_no_restart_enabled:
-                                  e.target.checked,
-                              })
-                            }
-                          />
-                          <span className="qs-switch-slider"></span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="qs-hint">
+                <div className="qs-row">
+                  <div className="qs-row-label">
+                    <span>
                       {t(
-                        "settings.general.antigravityDualSwitchNoRestartDesc",
-                        "切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity。",
+                        "settings.general.antigravityDualSwitchNoRestart",
+                        "无感双通道切号（不重启）",
                       )}
-                    </div>
-                  </>
-                )}
+                    </span>
+                  </div>
+                  <div className="qs-row-control">
+                    <label className="qs-switch">
+                      <input
+                        type="checkbox"
+                        checked={
+                          config.antigravity_dual_switch_no_restart_enabled
+                        }
+                        onChange={(e) =>
+                          saveConfig({
+                            antigravity_dual_switch_no_restart_enabled:
+                              e.target.checked,
+                          })
+                        }
+                      />
+                      <span className="qs-switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="qs-hint">
+                  {t(
+                    "settings.general.antigravityDualSwitchNoRestartDesc",
+                    "切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity。",
+                  )}
+                </div>
 
                 <div className="qs-row">
                   <div className="qs-row-label">
