@@ -1294,7 +1294,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       "仅用于界面更新「所有历史账号」的面板数据。\n完全不影响自动切号！\n（切号引擎有独立的动态提频追踪策略）"
                     }
                   >
-                    !
+                    Tip
                   </span>
                 )}
               </div>

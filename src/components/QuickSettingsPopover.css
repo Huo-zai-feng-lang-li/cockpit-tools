@@ -578,3 +578,29 @@
   opacity: 1;
   transform: translateY(0);
 }
+
+/* 
+  Fix for top-row items:
+  Since .qs-body has overflow-y: auto, any upward tooltip in the first row 
+  will be clipped by the top boundary. We force the first section's tooltip to point down. 
+*/
+.qs-body > .qs-section:first-child .qs-info-icon {
+  z-index: 101;
+}
+.qs-body > .qs-section:first-child .qs-info-icon::before {
+  top: calc(100% + 8px);
+  bottom: auto;
+  transform: translateY(4px);
+  transform-origin: top left;
+}
+.qs-body > .qs-section:first-child .qs-info-icon::after {
+  top: calc(100% + 2px);
+  bottom: auto;
+  border-bottom: 6px solid rgba(24, 24, 28, 0.96);
+  border-top: none;
+  transform: translateY(4px);
+}
+.qs-body > .qs-section:first-child .qs-info-icon:hover::before,
+.qs-body > .qs-section:first-child .qs-info-icon:hover::after {
+  transform: translateY(0);
+}
