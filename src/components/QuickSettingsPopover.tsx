@@ -1253,7 +1253,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 {type === "antigravity" && (
                   <span
                     className="qs-info-icon"
-                    title="【独立机制说明】&#10;&#10;此处的“自动刷新”控制的是在界面上更新所有保存账号的面板数据。&#10;&#10;注意：开启「自动切号」后，系统内部会额外独立运行一个高频（最小 30s）的局部监控协程，仅盯着当前账号。&#10;&#10;👉 这两套机制完全独立！建议此处全局刷新保持 5 或 10 分钟以上，切勿设为1分钟，否则频繁请求所有账号极易导致大面积限流（Rate Limit）。"
+                    title="仅用于界面更新「所有历史账号」的面板数据。&#10;不影响自动切号！（切号引擎后台自带独立 30s 探测雷达）"
                   >
                     !
                   </span>
@@ -1301,13 +1301,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <option value="-1">
                       {t("settings.general.autoRefreshDisabled")}
                     </option>
-                    <option value="2">2 {t("settings.general.minutes")}</option>
-                    <option value="5">5 {t("settings.general.minutes")}</option>
+                    <option value="3">3 {t("settings.general.minutes")}</option>
+                    <option value="5">
+                      5 {t("settings.general.minutes")}（推荐）
+                    </option>
                     <option value="10">
                       10 {t("settings.general.minutes")}
-                    </option>
-                    <option value="15">
-                      15 {t("settings.general.minutes")}
                     </option>
                     <option value="custom">
                       {t("quickSettings.customInput", "自定义")}
@@ -1872,7 +1871,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         </span>
                         <span
                           className="qs-info-icon"
-                          title="四层智能防御机制（自动生效）&#10;&#10;① 速率预判：消耗速率预测 90s 内耗尽 且 配额 ＜ 30% → 提前切号&#10;② 阈值兜底：配额降至设定阈值（推荐 0%）→ 切换&#10;③ 紧急熔断：IDE 返回 429 限流 → 立即切号&#10;④ 动态提频：配额 ＜ 30% 时加速至 30s 一次检测&#10;&#10;推荐 0%：靠速率预判和熔断兜底，最大化当前账号用量。"
+                          title="后台独立探测：自带雷达30s高频刷新监控（伴有提前预判与熔断抓取）。&#10;&#10;推荐 0% 兜底线，榨干每滴配额。"
                         >
                           !
                         </span>
