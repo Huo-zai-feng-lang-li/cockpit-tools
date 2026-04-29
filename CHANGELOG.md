@@ -4,7 +4,17 @@ English · [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to Cockpit Tools will be documented in this file.
 
-## The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+---
+
+## [0.20.25] - 2026-04-29
+
+### Changed
+
+- **Auto-switch tooltip elaborated**: Expanded the auto-switch tooltip to explicitly break down the 4-layer defense system (Dynamic Frequency, Velocity Prediction, 429 Recovery, Threshold Fallback) to provide clearer insights into the backend's mixed defensive strategies.
+
+---
 
 ## [0.20.24] - 2026-04-29
 
