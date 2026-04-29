@@ -42,7 +42,7 @@
   animation: qsModalIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* overflow: hidden removed to allow tooltip escape */
 }
 
 @keyframes qsModalIn {
@@ -522,7 +522,7 @@
 .qs-info-icon:hover {
   background: linear-gradient(135deg, #4f46e5, #7c3aed);
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
-  transform: scale(1.15) translateY(-1px);
+  z-index: 100; /* Create higher stacking context for tooltip rendering */
 }
 
 /* Custom tooltip bubble */
@@ -530,24 +530,25 @@
 .qs-info-icon::after {
   content: "";
   position: absolute;
-  bottom: calc(100% + 8px);
   pointer-events: none;
   opacity: 0;
   transition:
     opacity 0.18s,
     transform 0.18s;
-  transform-origin: bottom center;
+  transform-origin: bottom left;
+  z-index: 99999;
 }
 
 .qs-info-icon::before {
   content: attr(data-tip);
+  bottom: calc(100% + 8px);
+  left: -4px; /* anchor slightly to the left of the badge */
   width: max-content;
-  max-width: 330px;
+  max-width: 310px;
   padding: 9px 12px;
   background: rgba(24, 24, 28, 0.96);
   color: rgba(255, 255, 255, 0.92);
   font-size: 11.5px;
-  font-style: normal;
   font-weight: 400;
   line-height: 1.65;
   white-space: pre-line;
@@ -555,12 +556,10 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   text-align: left;
-  z-index: 9999;
-  left: -20px;
-  transform: translateY(4px);
+  transform: translateY(-4px);
 }
 
-/* Caret */
+/* Caret pointing down */
 .qs-info-icon::after {
   content: "";
   width: 0;
@@ -568,18 +567,14 @@
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
   border-top: 6px solid rgba(24, 24, 28, 0.96);
+  border-bottom: none;
   bottom: calc(100% + 2px);
-  left: 50%;
-  transform: translateX(-50%) translateY(4px);
-  z-index: 9999;
+  left: 12px; /* point at the center of the Tip badge */
+  transform: translateY(-4px);
 }
 
-.qs-info-icon:hover::before {
-  opacity: 1;
-  transform: translateY(0);
-}
-
+.qs-info-icon:hover::before,
 .qs-info-icon:hover::after {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
