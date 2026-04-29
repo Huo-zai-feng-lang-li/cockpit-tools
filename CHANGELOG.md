@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.28] - 2026-04-29
+
+### Changed
+
+- **Tooltip icon restyled**: Transformed the warning-style `!` info icon into a sleek, glassmorphism `Tip` pill badge with an indigo-purple gradient to improve visual aesthetics and better align with the overall premium UI design.
+
+---
+
 ## [0.20.27] - 2026-04-29
 
 ### Fixed
