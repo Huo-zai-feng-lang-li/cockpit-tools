@@ -522,7 +522,7 @@
 .qs-info-icon:hover {
   background: linear-gradient(135deg, #4f46e5, #7c3aed);
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
-  z-index: 100; /* Create higher stacking context for tooltip rendering */
+  z-index: 9999; /* Create max stacking context for tooltip rendering */
 }
 
 /* Custom tooltip bubble */
@@ -584,9 +584,6 @@
   Since .qs-body has overflow-y: auto, any upward tooltip in the first row 
   will be clipped by the top boundary. We force the first section's tooltip to point down. 
 */
-.qs-body > .qs-section:first-child .qs-info-icon {
-  z-index: 101;
-}
 .qs-body > .qs-section:first-child .qs-info-icon::before {
   top: calc(100% + 8px);
   bottom: auto;
