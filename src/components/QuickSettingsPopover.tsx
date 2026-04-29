@@ -8,11 +8,7 @@ import {
   isCodexCodeReviewQuotaVisibleByDefault,
   persistCodexCodeReviewQuotaVisible,
 } from "../utils/codexPreferences";
-import {
-  FEATURE_UNLOCK_CHANGED_EVENT,
-  type FeatureUnlockChangedDetail,
-  isAntigravitySeamlessSwitchFeatureUnlocked,
-} from "../utils/featureUnlocks";
+
 import { getDisplayGroups, type DisplayGroup } from "../services/groupService";
 import "./QuickSettingsPopover.css";
 
