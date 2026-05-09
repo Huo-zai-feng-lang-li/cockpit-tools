@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.33] - 2026-05-09
+
+### Fixed
+
+- **Wakeup scheduling logic fully persisted**: Both Antigravity and Codex wakeup schedulers now persist their critical runtime states (`last_run_at`, `reset_states`, `last_executed_at`) to local disk. This ensures that application restarts no longer trigger redundant "waves" of wakeups for accounts that were already processed in the current reset cycle.
+- **Granular account-level targeted wakeup**: Refactored the wakeup triggers to operate at the individual account level rather than the task level. Now, when a specific account's quota resets, only that account is woken up, preventing unnecessary full-batch executions.
+
+---
+
 ## [0.20.32] - 2026-04-29
 
 ### Changed

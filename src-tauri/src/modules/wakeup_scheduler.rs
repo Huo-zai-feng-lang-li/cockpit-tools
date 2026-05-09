@@ -1,4 +1,6 @@
 use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -12,6 +14,7 @@ use crate::modules;
 const DEFAULT_PROMPT: &str = "hi";
 const RESET_TRIGGER_COOLDOWN_MS: i64 = 10 * 60 * 1000;
 const RESET_SAFETY_MARGIN_MS: i64 = 2 * 60 * 1000;
+const STATE_FILE: &str = "wakeup_scheduler_state.json";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -75,8 +78,9 @@ struct ScheduleConfigNormalized {
     fallback_times: Vec<String>,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 struct ResetState {
+    /// key: "account_email:model_id"
     last_reset_trigger_timestamps: HashMap<String, String>,
     last_reset_trigger_at: HashMap<String, i64>,
     last_reset_remaining: HashMap<String, i32>,
@@ -92,11 +96,66 @@ struct SchedulerState {
     last_executed_at: HashMap<String, i64>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct PersistedState {
+    reset_states: HashMap<String, ResetState>,
+    last_executed_at: HashMap<String, i64>,
+}
+
 static STATE: OnceLock<Mutex<SchedulerState>> = OnceLock::new();
 static STARTED: OnceLock<Mutex<bool>> = OnceLock::new();
 
 fn state() -> &'static Mutex<SchedulerState> {
-    STATE.get_or_init(|| Mutex::new(SchedulerState::default()))
+    STATE.get_or_init(|| {
+        let (reset_states, last_executed_at) = load_state();
+        Mutex::new(SchedulerState {
+            reset_states,
+            last_executed_at,
+            ..Default::default()
+        })
+    })
+}
+
+fn state_path() -> Result<PathBuf, String> {
+    Ok(modules::account::get_data_dir()?.join(STATE_FILE))
+}
+
+fn load_state() -> (HashMap<String, ResetState>, HashMap<String, i64>) {
+    let path = match state_path() {
+        Ok(p) => p,
+        Err(_) => return (HashMap::new(), HashMap::new()),
+    };
+    if !path.exists() {
+        return (HashMap::new(), HashMap::new());
+    }
+    let content = fs::read_to_string(&path).unwrap_or_default();
+    if content.is_empty() {
+        return (HashMap::new(), HashMap::new());
+    }
+    let persisted: PersistedState = serde_json::from_str(&content).unwrap_or_else(|_| PersistedState {
+        reset_states: HashMap::new(),
+        last_executed_at: HashMap::new(),
+    });
+    (persisted.reset_states, persisted.last_executed_at)
+}
+
+fn save_state(guard: &SchedulerState) {
+    let path = match state_path() {
+        Ok(p) => p,
+        Err(e) => {
+            modules::logger::log_error(&format!("[WakeupScheduler] 获取持久化路径失败: {}", e));
+            return;
+        }
+    };
+    let persisted = PersistedState {
+        reset_states: guard.reset_states.clone(),
+        last_executed_at: guard.last_executed_at.clone(),
+    };
+    if let Ok(content) = serde_json::to_string_pretty(&persisted) {
+        if let Err(e) = fs::write(path, content) {
+            modules::logger::log_error(&format!("[WakeupScheduler] 写入持久化状态失败: {}", e));
+        }
+    }
 }
 
 fn started_flag() -> &'static Mutex<bool> {
@@ -697,14 +756,14 @@ async fn handle_quota_reset_task(app: &AppHandle, task: &WakeupTask, now: DateTi
         return;
     }
 
-    let models_to_trigger = {
+    let targets_to_trigger = {
         let mut state_guard = state().lock().expect("wakeup state lock");
         let reset_state = state_guard
             .reset_states
             .entry(task.id.clone())
             .or_insert_with(ResetState::default);
 
-        let mut models_to_trigger: HashSet<String> = HashSet::new();
+        let mut targets: Vec<WakeupTarget> = Vec::new();
         for model_id in &task.schedule.selected_models {
             for account in &selected_accounts {
                 let quota_models = account
@@ -713,29 +772,33 @@ async fn handle_quota_reset_task(app: &AppHandle, task: &WakeupTask, now: DateTi
                     .map(|q| q.models.as_slice())
                     .unwrap_or(&[]);
                 if let Some(quota) = quota_models.iter().find(|item| item.name == *model_id) {
+                    // 使用 账号:模型 作为唯一标识，支持同一任务内不同账号独立识别重置
+                    let model_key = format!("{}:{}", account.email, model_id);
                     if should_trigger_on_reset(
                         reset_state,
-                        model_id,
+                        &model_key,
                         &quota.reset_time,
                         quota.percentage,
                     ) {
-                        models_to_trigger.insert(model_id.clone());
-                        mark_reset_triggered(reset_state, model_id, &quota.reset_time);
+                        targets.push(WakeupTarget {
+                            account_id: account.id.clone(),
+                            email: account.email.clone(),
+                            model_id: model_id.clone(),
+                        });
+                        mark_reset_triggered(reset_state, &model_key, &quota.reset_time);
                     }
                 }
             }
         }
-        models_to_trigger
+        targets
     };
 
-    if !models_to_trigger.is_empty() {
-        run_task_with_models(
-            app,
-            task,
-            "quota_reset",
-            models_to_trigger.into_iter().collect(),
-        )
-        .await;
+    if !targets_to_trigger.is_empty() {
+        {
+            let guard = state().lock().expect("wakeup state lock");
+            save_state(&guard);
+        }
+        run_task_with_targets(app, task, "quota_reset", targets_to_trigger).await;
     }
 }
 
@@ -779,6 +842,37 @@ async fn run_task_with_models(
         return;
     }
 
+    let mut targets = Vec::new();
+    for account in selected_accounts {
+        for model_id in &models {
+            targets.push(WakeupTarget {
+                account_id: account.id.clone(),
+                email: account.email.clone(),
+                model_id: model_id.clone(),
+            });
+        }
+    }
+
+    run_task_with_targets(app, task, trigger_source, targets).await;
+}
+
+#[derive(Debug, Clone)]
+struct WakeupTarget {
+    account_id: String,
+    email: String,
+    model_id: String,
+}
+
+async fn run_task_with_targets(
+    app: &AppHandle,
+    task: &WakeupTask,
+    trigger_source: &str,
+    targets: Vec<WakeupTarget>,
+) {
+    if targets.is_empty() {
+        return;
+    }
+
     {
         let mut guard = state().lock().expect("wakeup state lock");
         guard.running_tasks.insert(task.id.clone());
@@ -799,52 +893,55 @@ async fn run_task_with_models(
     let max_tokens = normalize_max_tokens(task.schedule.max_output_tokens);
 
     let mut history: Vec<modules::wakeup_history::WakeupHistoryItem> = Vec::new();
-    for account in &selected_accounts {
-        for model in &models {
-            let started = chrono::Utc::now();
-            let result =
-                modules::wakeup::trigger_wakeup(&account.id, model, &prompt, max_tokens, None)
-                    .await;
-            let duration = chrono::Utc::now()
-                .signed_duration_since(started)
-                .num_milliseconds()
-                .max(0) as u64;
-            let (success, message) = match result {
-                Ok(resp) => {
-                    // 唤醒成功，账号可正常发起请求，解除所有类型的禁用
-                    if let Ok(mut acc) = modules::load_account(&account.id) {
-                        if acc.disabled {
-                            modules::logger::log_info(&format!(
-                                "[WakeupScheduler] 唤醒成功，自动解除禁用状态: {}",
-                                acc.email
-                            ));
-                            acc.clear_disabled();
-                            acc.quota_error = None;
-                            let _ = modules::save_account(&acc);
-                        }
+    for target in targets {
+        let started = chrono::Utc::now();
+        let result = modules::wakeup::trigger_wakeup(
+            &target.account_id,
+            &target.model_id,
+            &prompt,
+            max_tokens,
+            None,
+        )
+        .await;
+        let duration = chrono::Utc::now()
+            .signed_duration_since(started)
+            .num_milliseconds()
+            .max(0) as u64;
+        let (success, message) = match result {
+            Ok(resp) => {
+                // 唤醒成功，账号可正常发起请求，解除所有类型的禁用
+                if let Ok(mut acc) = modules::load_account(&target.account_id) {
+                    if acc.disabled {
+                        modules::logger::log_info(&format!(
+                            "[WakeupScheduler] 唤醒成功，自动解除禁用状态: {}",
+                            acc.email
+                        ));
+                        acc.clear_disabled();
+                        acc.quota_error = None;
+                        let _ = modules::save_account(&acc);
                     }
-                    (true, Some(resp.reply))
                 }
-                Err(err) => (false, Some(err.to_string())),
-            };
-            history.push(modules::wakeup_history::WakeupHistoryItem {
-                id: format!(
-                    "{}-{}",
-                    chrono::Utc::now().timestamp_millis(),
-                    history.len()
-                ),
-                timestamp: chrono::Utc::now().timestamp_millis(),
-                trigger_type: "auto".to_string(),
-                trigger_source: trigger_source.to_string(),
-                task_name: Some(task.name.clone()),
-                account_email: account.email.clone(),
-                model_id: model.clone(),
-                prompt: Some(prompt.clone()),
-                success,
-                message,
-                duration: Some(duration),
-            });
-        }
+                (true, Some(resp.reply))
+            }
+            Err(err) => (false, Some(err.to_string())),
+        };
+        history.push(modules::wakeup_history::WakeupHistoryItem {
+            id: format!(
+                "{}-{}",
+                chrono::Utc::now().timestamp_millis(),
+                history.len()
+            ),
+            timestamp: chrono::Utc::now().timestamp_millis(),
+            trigger_type: "auto".to_string(),
+            trigger_source: trigger_source.to_string(),
+            task_name: Some(task.name.clone()),
+            account_email: target.email,
+            model_id: target.model_id,
+            prompt: Some(prompt.clone()),
+            success,
+            message,
+            duration: Some(duration),
+        });
     }
 
     {
@@ -858,6 +955,7 @@ async fn run_task_with_models(
         });
         // 记录本地执行时间，防止被前端同步覆盖导致重复执行
         guard.last_executed_at.insert(task.id.clone(), executed_at);
+        save_state(&guard);
     }
 
     // 写入历史文件

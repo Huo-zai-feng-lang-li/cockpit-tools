@@ -497,7 +497,7 @@ pub async fn codex_wakeup_run_task(
     task_id: String,
     run_id: Option<String>,
 ) -> Result<codex_wakeup::CodexWakeupBatchResult, String> {
-    codex_wakeup_scheduler::run_task_now(Some(&app), &task_id, "manual_task", run_id).await
+    codex_wakeup_scheduler::run_task_now(Some(&app), &task_id, "manual_task", run_id, None).await
 }
 
 // ─── Codex 账号分组持久化 ────────────────────────────────────────────

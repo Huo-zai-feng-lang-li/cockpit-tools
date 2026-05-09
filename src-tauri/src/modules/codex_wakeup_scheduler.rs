@@ -79,13 +79,16 @@ fn collect_task_reset_timestamps(task: &codex_wakeup::CodexWakeupTask) -> Vec<i6
     timestamps
 }
 
-fn current_due_at(task: &codex_wakeup::CodexWakeupTask, now: DateTime<Local>) -> Option<i64> {
+fn current_due_at(
+    task: &codex_wakeup::CodexWakeupTask,
+    now: DateTime<Local>,
+) -> Option<(i64, Option<Vec<String>>)> {
     match task.schedule.kind.as_str() {
         "daily" => {
             let minutes = parse_time_to_minutes(task.schedule.daily_time.as_deref()?)?;
             let candidate = build_local_datetime(now.date_naive(), minutes)?.timestamp();
             if candidate <= now.timestamp() && task.last_run_at.unwrap_or(0) < candidate {
-                Some(candidate)
+                Some((candidate, None))
             } else {
                 None
             }
@@ -98,7 +101,7 @@ fn current_due_at(task: &codex_wakeup::CodexWakeupTask, now: DateTime<Local>) ->
             }
             let candidate = build_local_datetime(now.date_naive(), minutes)?.timestamp();
             if candidate <= now.timestamp() && task.last_run_at.unwrap_or(0) < candidate {
-                Some(candidate)
+                Some((candidate, None))
             } else {
                 None
             }
@@ -108,17 +111,60 @@ fn current_due_at(task: &codex_wakeup::CodexWakeupTask, now: DateTime<Local>) ->
                 i64::from(task.schedule.interval_hours.unwrap_or(4).max(1)) * 3600;
             let due_at = task.last_run_at.unwrap_or(task.created_at) + interval_seconds;
             if due_at <= now.timestamp() {
-                Some(due_at)
+                Some((due_at, None))
             } else {
                 None
             }
         }
         "quota_reset" => {
-            let last_run_at = task.last_run_at.unwrap_or(task.created_at);
-            collect_task_reset_timestamps(task)
-                .into_iter()
-                .filter(|reset_at| *reset_at <= now.timestamp() && *reset_at > last_run_at)
-                .max()
+            let selected: HashSet<&str> = task.account_ids.iter().map(String::as_str).collect();
+            let mut due_accounts = Vec::new();
+            let mut latest_ts = 0i64;
+
+            let quota_reset_window = task.schedule.quota_reset_window.as_deref().unwrap_or("either");
+            let include_primary =
+                quota_reset_window == "either" || quota_reset_window == "primary_window";
+            let include_secondary =
+                quota_reset_window == "either" || quota_reset_window == "secondary_window";
+
+            for account in codex_account::list_accounts() {
+                if !selected.contains(account.id.as_str()) {
+                    continue;
+                }
+                let last_run_at = task
+                    .last_run_map
+                    .get(&account.id)
+                    .cloned()
+                    .unwrap_or(task.created_at);
+                if let Some(quota) = account.quota {
+                    let mut account_max_ts = 0i64;
+                    if include_primary {
+                        if let Some(ts) = quota.hourly_reset_time {
+                            if ts <= now.timestamp() && ts > last_run_at {
+                                account_max_ts = i64::max(account_max_ts, ts);
+                            }
+                        }
+                    }
+                    if include_secondary {
+                        if let Some(ts) = quota.weekly_reset_time {
+                            if ts <= now.timestamp() && ts > last_run_at {
+                                account_max_ts = i64::max(account_max_ts, ts);
+                            }
+                        }
+                    }
+
+                    if account_max_ts > 0 {
+                        due_accounts.push(account.id);
+                        latest_ts = i64::max(latest_ts, account_max_ts);
+                    }
+                }
+            }
+
+            if !due_accounts.is_empty() {
+                Some((latest_ts, Some(due_accounts)))
+            } else {
+                None
+            }
         }
         _ => None,
     }
@@ -185,6 +231,7 @@ pub async fn run_task_now(
     task_id: &str,
     trigger_type: &str,
     run_id: Option<String>,
+    target_account_ids: Option<Vec<String>>,
 ) -> Result<codex_wakeup::CodexWakeupBatchResult, String> {
     let task =
         codex_wakeup::get_task(task_id)?.ok_or_else(|| format!("唤醒任务不存在: {}", task_id))?;
@@ -197,9 +244,10 @@ pub async fn run_task_now(
         task_id: Some(task.id.clone()),
         task_name: Some(task.name.clone()),
     };
+    let execution_account_ids = target_account_ids.unwrap_or_else(|| task.account_ids.clone());
     let result = codex_wakeup::run_batch(
         app,
-        task.account_ids.clone(),
+        execution_account_ids,
         task.prompt.clone(),
         codex_wakeup::CodexWakeupExecutionConfig {
             model: task.model.clone(),
@@ -240,9 +288,9 @@ async fn run_scheduler_once(app: &AppHandle) {
         if !task.enabled {
             continue;
         }
-        if current_due_at(&task, now).is_none() {
+        let Some((_, target_account_ids)) = current_due_at(&task, now) else {
             continue;
-        }
+        };
 
         let task_id = task.id.clone();
         let trigger_type = if task.schedule.kind == "quota_reset" {
@@ -253,7 +301,8 @@ async fn run_scheduler_once(app: &AppHandle) {
         .to_string();
         let app_handle = app.clone();
         tauri::async_runtime::spawn(async move {
-            let result = run_task_now(Some(&app_handle), &task_id, &trigger_type, None).await;
+            let result =
+                run_task_now(Some(&app_handle), &task_id, &trigger_type, None, target_account_ids).await;
             if let Err(err) = result {
                 logger::log_warn(&format!(
                     "[CodexWakeup] 调度任务执行失败: task_id={}, error={}",

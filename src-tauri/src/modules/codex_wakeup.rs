@@ -108,6 +108,8 @@ pub struct CodexWakeupTask {
     pub last_duration_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_run_at: Option<i64>,
+    #[serde(default)]
+    pub last_run_map: std::collections::HashMap<String, i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1161,6 +1163,7 @@ fn normalize_task(raw: &CodexWakeupTask) -> CodexWakeupTask {
         last_failure_count: raw.last_failure_count,
         last_duration_ms: raw.last_duration_ms,
         next_run_at: raw.next_run_at,
+        last_run_map: raw.last_run_map.clone(),
     }
 }
 
@@ -2058,7 +2061,11 @@ pub fn update_task_after_run(
     let success_count = records.iter().filter(|item| item.success).count() as u32;
     let failure_count = records.len().saturating_sub(success_count as usize) as u32;
     let (summary_message, total_duration, _) = summarize_task_result(records);
-    task.last_run_at = Some(now_ts());
+    let now = now_ts();
+    task.last_run_at = Some(now);
+    for record in records {
+        task.last_run_map.insert(record.account_id.clone(), now);
+    }
     task.last_status = Some(if all_success { "success" } else { "error" }.to_string());
     task.last_message = summary_message;
     task.last_success_count = if records.is_empty() {
