@@ -9,10 +9,11 @@
 ---
 
 ## [0.20.38] - 2026-05-11
-### Fixed
-- Changed group quota aggregation from average to minimum for accurate display
-- Removed incorrect calibration formula
-- Supported raw API models map in Gemini usage parser
+### 修复
+- **Gemini Flash 配额显示**：将分组聚合策略从「平均值」改为「最小值」，修复了主力模型 `gemini-3-flash` 耗尽时分组仍显示 67% 的误导性问题
+- 移除了基于错误诊断的 `3x-200` 校准公式
+- 支持解析 Gemini 原始 API 响应中的 'models' 映射字段
+- **Gemini Standalone 视图显示对齐**：在前端解析层补齐逻辑，确保“Gemini 账号”独立视窗中的配额百分比与其它视图保持一致
 
 ---
 
