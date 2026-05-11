@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.39] - 2026-05-11
+### Fixed
+- **Seamless switch stability**: Increased the wait timeout for extension responses from 12s to 25s, providing better reliability during high-latency network conditions or host IDE load.
+
 ## [0.20.38] - 2026-05-11
 ### Fixed
 - **Gemini Flash quota display**: Fixed misleading 67% display by changing group aggregation from average to minimum — when the primary `gemini-3-flash` model is exhausted, the group now correctly shows 0%
