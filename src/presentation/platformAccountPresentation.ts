@@ -434,12 +434,13 @@ export function getAntigravityQuotaDisplayItems(account: Account, displayGroups:
   if (displayGroups.length === 0) {
     return rawDisplayModels.map((model) => {
       let percentage = model.percentage;
-      if (model.name.toLowerCase().includes('flash')) {
+      const label = getModelShortName(model.name);
+      if (model.name.toLowerCase().includes('flash') || label.toLowerCase().includes('flash')) {
         percentage = Math.max(0, Math.min(100, percentage * 3 - 200));
       }
       return {
         key: model.name,
-        label: getModelShortName(model.name),
+        label,
         percentage,
         resetTime: model.reset_time,
       };
@@ -469,12 +470,13 @@ export function getAntigravityQuotaDisplayItems(account: Account, displayGroups:
 
   return rawDisplayModels.map((model) => {
     let percentage = model.percentage;
-    if (model.name.toLowerCase().includes('flash')) {
+    const label = getModelShortName(model.name);
+    if (model.name.toLowerCase().includes('flash') || label.toLowerCase().includes('flash')) {
       percentage = Math.max(0, Math.min(100, percentage * 3 - 200));
     }
     return {
       key: model.name,
-      label: getModelShortName(model.name),
+      label,
       percentage,
       resetTime: model.reset_time,
     };

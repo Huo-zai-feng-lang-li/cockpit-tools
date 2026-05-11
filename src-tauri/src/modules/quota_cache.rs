@@ -88,11 +88,14 @@ pub fn write_quota_cache(source: &str, email: &str, quota: &QuotaData) -> Result
 /// 为 Gemini Free Tier Flash 模型校准配额百分比
 fn calibrate_gemini_quota(
     model_id: &str,
+    display_name: Option<&str>,
     percentage: i32,
     subscription_tier: Option<&str>,
 ) -> i32 {
     let lower_model_id = model_id.to_lowercase();
-    let is_gemini_flash = lower_model_id.contains("flash");
+    let lower_display_name = display_name.map(|s| s.to_lowercase()).unwrap_or_default();
+    
+    let is_gemini_flash = lower_model_id.contains("flash") || lower_display_name.contains("flash");
 
     if !is_gemini_flash {
         return percentage;
@@ -161,6 +164,7 @@ pub fn apply_cached_quota(account: &mut Account, source: &str) -> Result<bool, S
             // 应用 Gemini Flash 配额校准
             percentage = calibrate_gemini_quota(
                 &name,
+                display_name.as_deref(),
                 percentage,
                 quota.subscription_tier.as_deref(),
             );
