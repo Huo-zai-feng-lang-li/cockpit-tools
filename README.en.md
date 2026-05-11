@@ -30,6 +30,8 @@ A brand new visual dashboard providing a one-stop status overview:
 - **Quick Actions**: One-click refresh, one-click wake-up
 - **Visual Progress**: Intuitive progress bars showing quota consumption
 
+> **Note on Quota Aggregation**: To ensure timely status feedback, group quotas displayed on the dashboard use a **Minimum Aggregation** strategy. For example: the Gemini Flash group includes multiple model variants; as long as the primary `gemini-3-flash` is exhausted (0%), the entire group will display 0% immediately, even if other less common variants still have credits. This ensures you are notified as soon as your main model becomes unavailable.
+
 > ![Dashboard Overview](docs/images/dashboard_overview.png)
 
 ### 2. Antigravity Account Management
