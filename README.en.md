@@ -30,7 +30,10 @@ A brand new visual dashboard providing a one-stop status overview:
 - **Quick Actions**: One-click refresh, one-click wake-up
 - **Visual Progress**: Intuitive progress bars showing quota consumption
 
-> **Note on Quota Aggregation**: To ensure timely status feedback, group quotas displayed on the dashboard use a **Minimum Aggregation** strategy. For example: the Gemini Flash group includes multiple model variants; as long as the primary `gemini-3-flash` is exhausted (0%), the entire group will display 0% immediately, even if other less common variants still have credits. This ensures you are notified as soon as your main model becomes unavailable.
+> **Note on Quota Aggregation**: To ensure timely status feedback, the dashboard uses an **Intra-Group Minimum Aggregation** strategy.
+>
+> 1. **Independent Groups**: Each category (Claude, Gemini Pro, Gemini Flash) is completely independent. Exhaustion in one group will never affect the display of others.
+> 2. **Minimum Value**: Within a single group, if any model variant (e.g., `gemini-3-flash`) is exhausted (0%), the entire group will display 0% immediately, even if other variants in the same group still have credits. This ensures you are notified of the worst-case scenario as soon as your primary model becomes unavailable.
 
 > ![Dashboard Overview](docs/images/dashboard_overview.png)
 
