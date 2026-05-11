@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.34] - 2026-05-11
+
+### Fixed
+
+- **Gemini Free Tier Flash quota calibration**: Fixed the issue where Gemini Flash native API returns ~67% remaining quota even after the 500 RPD free limit is exhausted. Implemented a calibration layer that maps the [67%, 100%] reported range to the actual [0%, 100%] range for free-tier Flash models.
+- **Quota cache calibration sync**: Synchronized the calibration logic into the backend cache loading pipeline, ensuring accurate reporting even for cached or background-refreshed data.
+- **Gemini standalone view alignment**: Implemented front-end calibration in the parser layer to ensure consistent quota reporting in the "Gemini Accounts" standalone view.
+
+---
+
 ## [0.20.33] - 2026-05-09
 
 ### Fixed

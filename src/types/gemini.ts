@@ -156,6 +156,20 @@ export function getGeminiPlanBadgeClass(
   return 'unknown';
 }
 
+function calibrateGeminiFlashPercent(
+  modelId: string,
+  percent: number,
+  account: GeminiAccount,
+): number {
+  if (!modelId.toLowerCase().includes('flash')) return percent;
+  const tier = resolveGeminiTier(account);
+  if (tier !== 'free' && tier !== 'unknown') return percent;
+
+  // (x * 3 - 200).clamp(0, 100)
+  // 67 -> 1, 66 -> 0, 100 -> 100
+  return Math.max(0, Math.min(100, percent * 3 - 200));
+}
+
 export function getGeminiUsage(account: GeminiAccount): GeminiUsage {
   const raw = toObject(account.gemini_usage_raw);
   const bucketsRaw = raw?.buckets;
@@ -168,9 +182,14 @@ export function getGeminiUsage(account: GeminiAccount): GeminiUsage {
       const modelId = typeof bucket.modelId === 'string' ? bucket.modelId.trim() : '';
       const remainingFraction = toNumber(bucket.remainingFraction);
       if (!modelId || remainingFraction == null) return null;
+      const remainingPercent = calibrateGeminiFlashPercent(
+        modelId,
+        remainingFraction * 100,
+        account,
+      );
       return {
         modelId,
-        remainingPercent: clampPercent(remainingFraction * 100),
+        remainingPercent: clampPercent(remainingPercent),
         resetAt: parseResetAt(bucket.resetTime),
       };
     })
