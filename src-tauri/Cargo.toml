@@ -1,6 +1,6 @@
 [package]
 name = "cockpit-tools"
-version = "0.20.36"
+version = "0.20.37"
 description = "Cockpit Tools"
 authors = ["jlcodes"]
 license = "CC-BY-NC-SA-4.0"

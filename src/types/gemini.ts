@@ -256,10 +256,10 @@ export function getGeminiTierQuotaSummary(account: GeminiAccount): {
 } {
   const usage = getGeminiUsage(account);
   const proBucket = pickLowestRemainingBucket(usage.buckets, (modelId) =>
-    modelId.includes('pro'),
+    modelId.toLowerCase().includes('pro'),
   );
   const flashBucket = pickLowestRemainingBucket(usage.buckets, (modelId) =>
-    modelId.includes('flash'),
+    modelId.toLowerCase().includes('flash'),
   );
 
   return {

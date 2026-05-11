@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.37] - 2026-05-11
+### Fixed
+- Calibrated grouped model aggregate percentages
+- Made model matchers case-insensitive
+
+## [0.20.36] - 2026-05-11
+### Fixed
+- Fixed Flash calibration for placeholder model IDs by checking labels
+
 ## [0.20.35] - 2026-05-11
 ### Fixed
 - Enhanced Gemini Flash quota calibration with multi-layer logic (Backend network/cache + Frontend Presentation)

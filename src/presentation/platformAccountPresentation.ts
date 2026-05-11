@@ -379,7 +379,12 @@ function getAgAccountQuotas(account: Account): Record<string, number> {
     return quotas;
   }
   for (const model of account.quota.models) {
-    quotas[model.name] = model.percentage;
+    let percentage = model.percentage;
+    const label = getModelShortName(model.name);
+    if (model.name.toLowerCase().includes('flash') || label.toLowerCase().includes('flash')) {
+      percentage = Math.max(0, Math.min(100, percentage * 3 - 200));
+    }
+    quotas[model.name] = percentage;
   }
   return quotas;
 }
