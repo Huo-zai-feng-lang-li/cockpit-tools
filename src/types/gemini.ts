@@ -162,7 +162,8 @@ function calibrateGeminiFlashPercent(
   account: GeminiAccount,
 ): number {
   if (!modelId.toLowerCase().includes('flash')) return percent;
-  const tier = resolveGeminiTier(account);
+  const raw = (account.plan_name || account.tier_id || '').trim();
+  const tier = resolveGeminiPlanBucket(raw);
   if (tier !== 'free' && tier !== 'unknown') return percent;
 
   // (x * 3 - 200).clamp(0, 100)
