@@ -92,7 +92,7 @@ fn calibrate_gemini_quota(
     subscription_tier: Option<&str>,
 ) -> i32 {
     let lower_model_id = model_id.to_lowercase();
-    let is_gemini_flash = lower_model_id.contains("gemini") && lower_model_id.contains("flash");
+    let is_gemini_flash = lower_model_id.contains("flash");
 
     if !is_gemini_flash {
         return percentage;
@@ -100,7 +100,10 @@ fn calibrate_gemini_quota(
 
     // 只有 Free Tier 需要校准
     let is_free = subscription_tier
-        .map(|s| s.to_lowercase().contains("free") || s.to_lowercase().contains("legacy"))
+        .map(|s| {
+            let lower = s.to_lowercase();
+            lower.contains("free") || lower.contains("legacy") || lower.contains("standard")
+        })
         .unwrap_or(true);
 
     if !is_free {

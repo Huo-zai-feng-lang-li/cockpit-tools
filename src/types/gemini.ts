@@ -173,8 +173,17 @@ function calibrateGeminiFlashPercent(
 
 export function getGeminiUsage(account: GeminiAccount): GeminiUsage {
   const raw = toObject(account.gemini_usage_raw);
-  const bucketsRaw = raw?.buckets;
-  const buckets = Array.isArray(bucketsRaw) ? bucketsRaw : [];
+  let buckets: any[] = [];
+  if (Array.isArray(raw?.buckets)) {
+    buckets = raw.buckets;
+  } else if (raw?.models && typeof raw.models === 'object') {
+    // If it's the raw models map from API
+    buckets = Object.entries(raw.models).map(([modelId, info]: [string, any]) => ({
+      modelId,
+      remainingFraction: info?.quotaInfo?.remainingFraction,
+      resetTime: info?.quotaInfo?.resetTime,
+    }));
+  }
 
   const parsedBuckets: GeminiUsageBucket[] = buckets
     .map((item) => {
