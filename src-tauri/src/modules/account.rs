@@ -2216,7 +2216,7 @@ pub async fn switch_account_dual_no_restart(
         }
     };
 
-    let wait_timeout_ms = if was_started { 12_000 } else { 1_500 };
+    let wait_timeout_ms = if was_started { 25_000 } else { 1_500 };
     if let Err(wait_error) = modules::websocket::wait_for_connected_clients(wait_timeout_ms).await {
         modules::logger::log_warn(&format!(
             "[Switch][NoRestart] 扩展连接等待结束: {}",
@@ -2231,7 +2231,7 @@ pub async fn switch_account_dual_no_restart(
         &trigger_type,
         &trigger_source,
         reason,
-        12_000,
+        25_000,
     )
     .await;
     let seamless_duration_ms = seamless_started.elapsed().as_millis() as u64;
