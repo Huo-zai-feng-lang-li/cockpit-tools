@@ -8,27 +8,11 @@
 
 ---
 
-## [0.20.37] - 2026-05-11
-### 修复
-- 校准了分组模型汇总后的配额百分比
-- 使模型匹配器不再区分大小写
-
-## [0.20.36] - 2026-05-11
-### 修复
-- 通过校验显示标签修复了占位符模型 ID 的校准失效问题
-
-## [0.20.35] - 2026-05-11
-### 修复
-- 增强 Gemini Flash 配额校准，采用多层校验逻辑（后端网络/缓存 + 前端渲染层）
-- 支持解析 Gemini 原始 API 响应中的 'models' 映射字段
-
-## [0.20.34] - 2026-05-11
-
-### 修复
-
-- **Gemini Free Tier Flash 模型配额校准**：修复了 Gemini Flash 原生 API 在免费额度耗尽时仍返回约 67% 剩余额度的问题。新增校准层将 Google API 报告的 [67%, 100%] 映射为真实的 [0%, 100%]，确保界面能准确反映 500 RPD 限制。
-- **配额缓存校准同步**：在后端缓存加载链中同步加入了校准逻辑，确保离线状态或后台刷新的配额数据同样保持准确。
-- **Gemini Standalone 视图显示对齐**：在前端解析层补齐校准逻辑，确保“Gemini 账号”独立视窗中的配额百分比与其它视图保持一致。
+## [0.20.38] - 2026-05-11
+### Fixed
+- Changed group quota aggregation from average to minimum for accurate display
+- Removed incorrect calibration formula
+- Supported raw API models map in Gemini usage parser
 
 ---
 

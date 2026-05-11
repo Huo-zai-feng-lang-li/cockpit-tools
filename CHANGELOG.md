@@ -8,26 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [0.20.37] - 2026-05-11
+## [0.20.38] - 2026-05-11
 ### Fixed
-- Calibrated grouped model aggregate percentages
-- Made model matchers case-insensitive
-
-## [0.20.36] - 2026-05-11
-### Fixed
-- Fixed Flash calibration for placeholder model IDs by checking labels
-
-## [0.20.35] - 2026-05-11
-### Fixed
-- Enhanced Gemini Flash quota calibration with multi-layer logic (Backend network/cache + Frontend Presentation)
+- **Gemini Flash quota display**: Fixed misleading 67% display by changing group aggregation from average to minimum — when the primary `gemini-3-flash` model is exhausted, the group now correctly shows 0%
+- Removed incorrect `3x-200` calibration formula that was based on wrong diagnosis
 - Supported raw API 'models' map in Gemini usage parser
 
-## [0.20.34] - 2026-05-11
-
-### Fixed
-
-- **Gemini Free Tier Flash quota calibration**: Fixed the issue where Gemini Flash native API returns ~67% remaining quota even after the 500 RPD free limit is exhausted. Implemented a calibration layer that maps the [67%, 100%] reported range to the actual [0%, 100%] range for free-tier Flash models.
-- **Quota cache calibration sync**: Synchronized the calibration logic into the backend cache loading pipeline, ensuring accurate reporting even for cached or background-refreshed data.
 - **Gemini standalone view alignment**: Implemented front-end calibration in the parser layer to ensure consistent quota reporting in the "Gemini Accounts" standalone view.
 
 ---

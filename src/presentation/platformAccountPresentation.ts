@@ -379,12 +379,7 @@ function getAgAccountQuotas(account: Account): Record<string, number> {
     return quotas;
   }
   for (const model of account.quota.models) {
-    let percentage = model.percentage;
-    const label = getModelShortName(model.name);
-    if (model.name.toLowerCase().includes('flash') || label.toLowerCase().includes('flash')) {
-      percentage = Math.max(0, Math.min(100, percentage * 3 - 200));
-    }
-    quotas[model.name] = percentage;
+    quotas[model.name] = model.percentage;
   }
   return quotas;
 }
@@ -437,19 +432,12 @@ export function getAntigravityQuotaDisplayItems(account: Account, displayGroups:
   }
 
   if (displayGroups.length === 0) {
-    return rawDisplayModels.map((model) => {
-      let percentage = model.percentage;
-      const label = getModelShortName(model.name);
-      if (model.name.toLowerCase().includes('flash') || label.toLowerCase().includes('flash')) {
-        percentage = Math.max(0, Math.min(100, percentage * 3 - 200));
-      }
-      return {
-        key: model.name,
-        label,
-        percentage,
-        resetTime: model.reset_time,
-      };
-    });
+    return rawDisplayModels.map((model) => ({
+      key: model.name,
+      label: getModelShortName(model.name),
+      percentage: model.percentage,
+      resetTime: model.reset_time,
+    }));
   }
 
   const quotas = getAgAccountQuotas(account);
@@ -473,19 +461,12 @@ export function getAntigravityQuotaDisplayItems(account: Account, displayGroups:
     return groupedItems;
   }
 
-  return rawDisplayModels.map((model) => {
-    let percentage = model.percentage;
-    const label = getModelShortName(model.name);
-    if (model.name.toLowerCase().includes('flash') || label.toLowerCase().includes('flash')) {
-      percentage = Math.max(0, Math.min(100, percentage * 3 - 200));
-    }
-    return {
-      key: model.name,
-      label,
-      percentage,
-      resetTime: model.reset_time,
-    };
-  });
+  return rawDisplayModels.map((model) => ({
+    key: model.name,
+    label: getModelShortName(model.name),
+    percentage: model.percentage,
+    resetTime: model.reset_time,
+  }));
 }
 
 export function buildAntigravityAccountPresentation(

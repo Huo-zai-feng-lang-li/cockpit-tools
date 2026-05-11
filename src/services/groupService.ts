@@ -171,17 +171,16 @@ export function calculateGroupQuota(
     return null;
   }
   
-  let total = 0;
-  let count = 0;
+  let min: number | null = null;
   
   for (const modelId of modelsInGroup) {
     if (modelId in modelQuotas) {
-      total += modelQuotas[modelId];
-      count++;
+      const value = modelQuotas[modelId];
+      min = min === null ? value : Math.min(min, value);
     }
   }
   
-  return count > 0 ? Math.round(total / count) : null;
+  return min;
 }
 
 /**

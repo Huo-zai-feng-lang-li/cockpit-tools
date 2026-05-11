@@ -908,43 +908,6 @@ pub async fn fetch_project_id_with_context(
     (None, subscription_tier, credits)
 }
 
-/// 为 Gemini Free Tier Flash 模型校准配额百分比
-///
-/// 现象：Google 官方 API 在 Free Tier Flash 额度用光（实际 500 RPD）时，依然报告 `remainingFraction: 0.67`。
-/// 推测是因为后端依然按旧的 1500 RPD 逻辑计算百分比：(1500 - 500) / 1500 = 0.666...
-///
-/// 校准逻辑：将 [67, 100] 的区间线性映射到 [0, 100]。
-fn calibrate_gemini_quota(
-    model_id: &str,
-    display_name: Option<&str>,
-    percentage: i32,
-    subscription_tier: Option<&str>,
-) -> i32 {
-    let lower_model_id = model_id.to_lowercase();
-    let lower_display_name = display_name.map(|s| s.to_lowercase()).unwrap_or_default();
-    
-    let is_gemini_flash = lower_model_id.contains("flash") || lower_display_name.contains("flash");
-
-    if !is_gemini_flash {
-        return percentage;
-    }
-
-    // 只有 Free Tier 需要校准
-    let is_free = subscription_tier
-        .map(|s| {
-            let lower = s.to_lowercase();
-            lower.contains("free") || lower.contains("legacy") || lower.contains("standard")
-        })
-        .unwrap_or(true);
-
-    if !is_free {
-        return percentage;
-    }
-
-    // 线性映射: (x * 3 - 200).clamp(0, 100)
-    // 67 -> 1, 66 -> 0, 100 -> 100
-    (percentage * 3 - 200).max(0).min(100)
-}
 
 fn build_quota_data_from_response(
     quota_response: QuotaResponse,
@@ -965,9 +928,6 @@ fn build_quota_data_from_response(
                 .remaining_fraction
                 .map(|f| (f * 100.0) as i32)
                 .unwrap_or(0);
-
-            // 应用 Gemini Flash 配额校准
-            percentage = calibrate_gemini_quota(&name, display_name.as_deref(), percentage, subscription_tier.as_deref());
 
             let reset_time = quota_info.reset_time.unwrap_or_default();
             if name.contains("gemini") || name.contains("claude") {

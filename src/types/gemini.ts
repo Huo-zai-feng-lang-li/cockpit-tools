@@ -156,20 +156,6 @@ export function getGeminiPlanBadgeClass(
   return 'unknown';
 }
 
-function calibrateGeminiFlashPercent(
-  modelId: string,
-  percent: number,
-  account: GeminiAccount,
-): number {
-  if (!modelId.toLowerCase().includes('flash')) return percent;
-  const raw = (account.plan_name || account.tier_id || '').trim();
-  const tier = resolveGeminiPlanBucket(raw);
-  if (tier !== 'free' && tier !== 'unknown') return percent;
-
-  // (x * 3 - 200).clamp(0, 100)
-  // 67 -> 1, 66 -> 0, 100 -> 100
-  return Math.max(0, Math.min(100, percent * 3 - 200));
-}
 
 export function getGeminiUsage(account: GeminiAccount): GeminiUsage {
   const raw = toObject(account.gemini_usage_raw);
@@ -177,7 +163,6 @@ export function getGeminiUsage(account: GeminiAccount): GeminiUsage {
   if (Array.isArray(raw?.buckets)) {
     buckets = raw.buckets;
   } else if (raw?.models && typeof raw.models === 'object') {
-    // If it's the raw models map from API
     buckets = Object.entries(raw.models).map(([modelId, info]: [string, any]) => ({
       modelId,
       remainingFraction: info?.quotaInfo?.remainingFraction,
@@ -192,14 +177,9 @@ export function getGeminiUsage(account: GeminiAccount): GeminiUsage {
       const modelId = typeof bucket.modelId === 'string' ? bucket.modelId.trim() : '';
       const remainingFraction = toNumber(bucket.remainingFraction);
       if (!modelId || remainingFraction == null) return null;
-      const remainingPercent = calibrateGeminiFlashPercent(
-        modelId,
-        remainingFraction * 100,
-        account,
-      );
       return {
         modelId,
-        remainingPercent: clampPercent(remainingPercent),
+        remainingPercent: clampPercent(remainingFraction * 100),
         resetAt: parseResetAt(bucket.resetTime),
       };
     })
