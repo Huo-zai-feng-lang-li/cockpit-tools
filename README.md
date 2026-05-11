@@ -34,6 +34,19 @@
 >
 > 1. **组内生效**：每个分组（如 Claude、Gemini Pro、Gemini Flash）是完全独立的。一个分组内的模型耗尽，绝对不会影响其它分组的显示。
 > 2. **取最小值**：在同一个分组内，只要任何一个变体（如 `gemini-3-flash`）额度用光（0%），即使同组其它变体仍有额度，整组也会立即显示为 0%。这能确保您在主力模型失效时第一时间获知最差状态。
+**不会。** MIN 是**组内取最小值**，不是跨组。
+
+三个分组是完全独立的：
+
+| 分组 | 包含的模型 | 取最小值范围 |
+|---|---|---|
+| **Claude** | claude-opus-4-6, claude-sonnet-4-6 等 | 仅在 Claude 模型之间取 MIN |
+| **Gemini Pro** | gemini-3.1-pro-high, gemini-3.1-pro-low 等 | 仅在 Pro 模型之间取 MIN |
+| **Gemini Flash** | gemini-3-flash, gemini-3.1-flash-lite 等 | 仅在 Flash 模型之间取 MIN |
+
+所以：
+- Claude Opus 耗尽 → **只影响 Claude 分组显示**，Gemini Flash 不受影响
+- gemini-3-flash 耗尽 → **只影响 Gemini Flash 分组显示**，Claude 不受影响
 
 > ![Dashboard Overview](docs/images/dashboard_overview.png)
 
