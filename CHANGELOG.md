@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.40] - 2026-05-24
+### Added
+- **Codex Desktop wakeup runtime support**: Codex wakeup tasks can now discover the bundled desktop runtime instead of requiring only the system `codex` CLI.
+
+### Fixed
+- **Codex weekly full-quota wakeups**: Fixed Free weekly quota states that show 7d/full quota without `reset_time` not triggering; selected pool accounts now wake independently and write per-account cooldowns to avoid repeated wakeups.
+
 ## [0.20.39] - 2026-05-11
 ### Fixed
 - **Seamless switch stability**: Increased the wait timeout for extension responses from 12s to 25s, providing better reliability during high-latency network conditions or host IDE load.

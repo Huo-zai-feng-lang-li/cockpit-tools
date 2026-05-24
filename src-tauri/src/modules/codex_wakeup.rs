@@ -634,6 +634,92 @@ fn append_home_cli_dirs(dirs: &mut Vec<PathBuf>) {
     }
 }
 
+fn codex_desktop_app_names() -> &'static [&'static str] {
+    &[
+        "Codex",
+        "OpenAI Codex",
+        "Codex Desktop",
+        "Codex-Editable",
+        "Codex Editable",
+        "codex",
+    ]
+}
+
+fn append_current_exe_resource_dirs(dirs: &mut Vec<PathBuf>) {
+    let Ok(exe_path) = std::env::current_exe() else {
+        return;
+    };
+    let Some(exe_dir) = exe_path.parent() else {
+        return;
+    };
+
+    push_unique_dir(dirs, exe_dir.to_path_buf());
+    push_unique_dir(dirs, exe_dir.join("resources"));
+    if let Some(parent) = exe_dir.parent() {
+        push_unique_dir(dirs, parent.join("resources"));
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn append_windows_desktop_resource_dirs(dirs: &mut Vec<PathBuf>, root: &Path) {
+    for app_name in codex_desktop_app_names() {
+        push_unique_dir(dirs, root.join(app_name).join("resources"));
+        push_unique_dir(dirs, root.join("Programs").join(app_name).join("resources"));
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn append_desktop_install_resource_dirs(dirs: &mut Vec<PathBuf>) {
+    for env_name in [
+        "LOCALAPPDATA",
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "PROGRAMW6432",
+    ] {
+        if let Some(root) = std::env::var_os(env_name) {
+            append_windows_desktop_resource_dirs(dirs, &PathBuf::from(root));
+        }
+    }
+
+    for drive in b'A'..=b'Z' {
+        let root = PathBuf::from(format!("{}:\\", drive as char));
+        if root.is_dir() {
+            append_windows_desktop_resource_dirs(dirs, &root);
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn append_desktop_install_resource_dirs(dirs: &mut Vec<PathBuf>) {
+    let mut roots = vec![PathBuf::from("/Applications")];
+    if let Some(home) = std::env::var_os("HOME") {
+        roots.push(PathBuf::from(home).join("Applications"));
+    }
+
+    for root in roots {
+        for app_name in codex_desktop_app_names() {
+            push_unique_dir(
+                dirs,
+                root.join(format!("{}.app", app_name))
+                    .join("Contents")
+                    .join("Resources"),
+            );
+        }
+    }
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+fn append_desktop_install_resource_dirs(dirs: &mut Vec<PathBuf>) {
+    append_home_cli_dirs(dirs);
+}
+
+fn collect_desktop_runtime_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    append_current_exe_resource_dirs(&mut dirs);
+    append_desktop_install_resource_dirs(&mut dirs);
+    dirs
+}
+
 #[cfg(target_os = "macos")]
 fn append_platform_cli_dirs(dirs: &mut Vec<PathBuf>) {
     for dir in [
@@ -781,6 +867,18 @@ fn resolve_binary_from_path() -> Option<PathBuf> {
     resolve_binary_in_dirs(&dirs, binary_candidates())
 }
 
+fn resolve_binary_from_desktop_runtime() -> Option<PathBuf> {
+    let dirs = collect_desktop_runtime_dirs();
+
+    logger::log_info(&format!(
+        "[CodexWakeup][CLI] 扫描 Codex 桌面端运行时目录: 目录数={}, 预览={}",
+        dirs.len(),
+        summarize_path_dirs_for_log(&dirs)
+    ));
+
+    resolve_binary_in_dirs(&dirs, binary_candidates())
+}
+
 fn resolve_node_from_binary_path(binary_path: &Path) -> Option<PathBuf> {
     let mut dirs = collect_runtime_search_dirs();
 
@@ -901,7 +999,17 @@ fn resolve_binary() -> Result<ResolvedBinary, String> {
         return build_resolved_binary(path, "PATH".to_string());
     }
 
-    let err = "未检测到 Codex CLI，请先安装 `codex` 命令。".to_string();
+    if let Some(path) = resolve_binary_from_desktop_runtime() {
+        logger::log_info(&format!(
+            "[CodexWakeup][CLI] 已从 Codex 桌面端资源目录解析到 codex: {}",
+            path.display()
+        ));
+        return build_resolved_binary(path, "Codex Desktop".to_string());
+    }
+
+    let err =
+        "未检测到 Codex CLI 或 Codex 桌面端内置运行时，请先安装 `codex` 命令或安装 Codex 桌面端。"
+            .to_string();
     logger::log_warn(&format!("[CodexWakeup][CLI] {}", err));
     Err(err)
 }
