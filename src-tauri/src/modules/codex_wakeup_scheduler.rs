@@ -73,8 +73,9 @@ fn fresh_quota_window_due_at(
     }
 
     let cycle_started_at = reset_at.saturating_sub(window_seconds);
+    let rearm_seconds = window_seconds.saturating_sub(FRESH_WINDOW_GRACE_SECONDS);
     let already_processed = last_run_at
-        .map(|value| value >= cycle_started_at)
+        .map(|value| value >= cycle_started_at || now_ts.saturating_sub(value) < rearm_seconds)
         .unwrap_or(false);
     if already_processed {
         return None;
@@ -533,6 +534,45 @@ mod tests {
                 now_ts,
             ),
             None
+        );
+    }
+
+    #[test]
+    fn fresh_secondary_window_skips_recent_success_even_when_reset_drifts() {
+        let now_ts = 1_800_000_000;
+        let previous_run_at = now_ts - 81;
+        let shifted_cycle_started_at = now_ts;
+        let reset_at = shifted_cycle_started_at + SECONDARY_WINDOW_FALLBACK_MINUTES * 60;
+
+        assert_eq!(
+            fresh_quota_window_due_at(
+                reset_at,
+                FULL_QUOTA_WAKEUP_THRESHOLD,
+                None,
+                SECONDARY_WINDOW_FALLBACK_MINUTES,
+                Some(previous_run_at),
+                now_ts,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn fresh_primary_window_rearms_after_window_elapsed() {
+        let now_ts = 1_800_000_000;
+        let reset_at = now_ts + PRIMARY_WINDOW_FALLBACK_MINUTES * 60;
+        let previous_run_at = now_ts - PRIMARY_WINDOW_FALLBACK_MINUTES * 60;
+
+        assert_eq!(
+            fresh_quota_window_due_at(
+                reset_at,
+                FULL_QUOTA_WAKEUP_THRESHOLD,
+                None,
+                PRIMARY_WINDOW_FALLBACK_MINUTES,
+                Some(previous_run_at),
+                now_ts,
+            ),
+            Some(now_ts)
         );
     }
 
