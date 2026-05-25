@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.43] - 2026-05-25
+### Fixed
+- **Codex full-quota wakeup scheduling**: Quota reset tasks now keep near-future 7d window starts as `next_run_at` candidates but wait until the cycle start is actually due before executing, preventing repeated wakeups within the 60-second freshness grace window.
+
 ## [0.20.42] - 2026-05-25
 ### Fixed
 - **Codex 7d full-quota wakeup detection**: Wakeups now fire only for task-pool accounts that are still at the exact 7d reset window and meet the quota threshold; accounts already counting down at `6d 23h...` no longer retrigger.

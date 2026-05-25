@@ -13,6 +13,11 @@ const PRIMARY_WINDOW_FALLBACK_MINUTES: i64 = 5 * 60;
 const SECONDARY_WINDOW_FALLBACK_MINUTES: i64 = 7 * 24 * 60;
 const FRESH_WINDOW_GRACE_SECONDS: i64 = 60;
 
+struct QuotaResetCandidate {
+    account_id: String,
+    due_at: i64,
+}
+
 fn started_flag() -> &'static Mutex<bool> {
     STARTED.get_or_init(|| Mutex::new(false))
 }
@@ -99,6 +104,113 @@ fn quota_window_matches_filter(
     }
 }
 
+fn push_latest_due_at(latest_ts: &mut i64, due_at: Option<i64>) {
+    if let Some(value) = due_at {
+        *latest_ts = i64::max(*latest_ts, value);
+    }
+}
+
+fn collect_quota_reset_candidates(
+    task: &codex_wakeup::CodexWakeupTask,
+    now_ts: i64,
+) -> Vec<QuotaResetCandidate> {
+    let selected: HashSet<&str> = task.account_ids.iter().map(String::as_str).collect();
+    let quota_reset_window = task
+        .schedule
+        .quota_reset_window
+        .as_deref()
+        .unwrap_or("either");
+    let mut candidates = Vec::new();
+
+    for account in codex_account::list_accounts() {
+        if !selected.contains(account.id.as_str()) {
+            continue;
+        }
+
+        let Some(quota) = account.quota else {
+            continue;
+        };
+
+        let last_run_at = task.last_run_map.get(&account.id).cloned();
+        let include_primary = quota_window_matches_filter(
+            quota_reset_window,
+            "primary_window",
+            quota.hourly_window_minutes,
+            PRIMARY_WINDOW_FALLBACK_MINUTES,
+        );
+        let include_secondary = quota_window_matches_filter(
+            quota_reset_window,
+            "secondary_window",
+            quota.weekly_window_minutes,
+            SECONDARY_WINDOW_FALLBACK_MINUTES,
+        );
+        let mut latest_ts = 0i64;
+
+        if include_primary {
+            push_latest_due_at(
+                &mut latest_ts,
+                quota.hourly_reset_time.and_then(|ts| {
+                    fresh_quota_window_due_at(
+                        ts,
+                        quota.hourly_percentage,
+                        quota.hourly_window_minutes,
+                        PRIMARY_WINDOW_FALLBACK_MINUTES,
+                        last_run_at,
+                        now_ts,
+                    )
+                }),
+            );
+        }
+
+        if include_secondary {
+            push_latest_due_at(
+                &mut latest_ts,
+                quota.weekly_reset_time.and_then(|ts| {
+                    fresh_quota_window_due_at(
+                        ts,
+                        quota.weekly_percentage,
+                        quota.weekly_window_minutes,
+                        SECONDARY_WINDOW_FALLBACK_MINUTES,
+                        last_run_at,
+                        now_ts,
+                    )
+                }),
+            );
+        }
+
+        if latest_ts > 0 {
+            candidates.push(QuotaResetCandidate {
+                account_id: account.id,
+                due_at: latest_ts,
+            });
+        }
+    }
+
+    candidates
+}
+
+fn due_quota_reset_accounts(
+    candidates: Vec<QuotaResetCandidate>,
+    now_ts: i64,
+) -> Option<(i64, Option<Vec<String>>)> {
+    let mut due_accounts = Vec::new();
+    let mut latest_ts = 0i64;
+
+    for candidate in candidates {
+        if candidate.due_at > now_ts {
+            continue;
+        }
+        due_accounts.push(candidate.account_id);
+        latest_ts = i64::max(latest_ts, candidate.due_at);
+    }
+
+    if due_accounts.is_empty() {
+        None
+    } else {
+        Some((latest_ts, Some(due_accounts)))
+    }
+}
+
 fn current_due_at(
     task: &codex_wakeup::CodexWakeupTask,
     now: DateTime<Local>,
@@ -137,77 +249,9 @@ fn current_due_at(
             }
         }
         "quota_reset" => {
-            let selected: HashSet<&str> = task.account_ids.iter().map(String::as_str).collect();
-            let mut due_accounts = Vec::new();
-            let mut latest_ts = 0i64;
             let now_ts = now.timestamp();
-
-            let quota_reset_window = task
-                .schedule
-                .quota_reset_window
-                .as_deref()
-                .unwrap_or("either");
-
-            for account in codex_account::list_accounts() {
-                if !selected.contains(account.id.as_str()) {
-                    continue;
-                }
-                let last_run_at = task.last_run_map.get(&account.id).cloned();
-                if let Some(quota) = account.quota {
-                    let mut account_max_ts = 0i64;
-                    let include_primary = quota_window_matches_filter(
-                        quota_reset_window,
-                        "primary_window",
-                        quota.hourly_window_minutes,
-                        PRIMARY_WINDOW_FALLBACK_MINUTES,
-                    );
-                    let include_secondary = quota_window_matches_filter(
-                        quota_reset_window,
-                        "secondary_window",
-                        quota.weekly_window_minutes,
-                        SECONDARY_WINDOW_FALLBACK_MINUTES,
-                    );
-                    if include_primary {
-                        if let Some(ts) = quota.hourly_reset_time {
-                            if let Some(due_at) = fresh_quota_window_due_at(
-                                ts,
-                                quota.hourly_percentage,
-                                quota.hourly_window_minutes,
-                                PRIMARY_WINDOW_FALLBACK_MINUTES,
-                                last_run_at,
-                                now_ts,
-                            ) {
-                                account_max_ts = i64::max(account_max_ts, due_at);
-                            }
-                        }
-                    }
-                    if include_secondary {
-                        if let Some(ts) = quota.weekly_reset_time {
-                            if let Some(due_at) = fresh_quota_window_due_at(
-                                ts,
-                                quota.weekly_percentage,
-                                quota.weekly_window_minutes,
-                                SECONDARY_WINDOW_FALLBACK_MINUTES,
-                                last_run_at,
-                                now_ts,
-                            ) {
-                                account_max_ts = i64::max(account_max_ts, due_at);
-                            }
-                        }
-                    }
-
-                    if account_max_ts > 0 {
-                        due_accounts.push(account.id);
-                        latest_ts = i64::max(latest_ts, account_max_ts);
-                    }
-                }
-            }
-
-            if !due_accounts.is_empty() {
-                Some((latest_ts, Some(due_accounts)))
-            } else {
-                None
-            }
+            let candidates = collect_quota_reset_candidates(task, now_ts);
+            due_quota_reset_accounts(candidates, now_ts)
         }
         _ => None,
     }
@@ -247,7 +291,10 @@ pub fn calculate_next_run_at(task: &codex_wakeup::CodexWakeupTask) -> Option<i64
                 i64::from(task.schedule.interval_hours.unwrap_or(4).max(1)) * 3600;
             Some(task.last_run_at.unwrap_or(task.created_at) + interval_seconds)
         }
-        "quota_reset" => current_due_at(task, now).map(|(due_at, _)| due_at),
+        "quota_reset" => collect_quota_reset_candidates(task, now.timestamp())
+            .into_iter()
+            .map(|candidate| candidate.due_at)
+            .min(),
         _ => None,
     }
 }
@@ -399,6 +446,25 @@ mod tests {
     }
 
     #[test]
+    fn fresh_secondary_window_reports_future_cycle_start_inside_grace() {
+        let now_ts = 1_800_000_000;
+        let cycle_started_at = now_ts + FRESH_WINDOW_GRACE_SECONDS;
+        let reset_at = cycle_started_at + SECONDARY_WINDOW_FALLBACK_MINUTES * 60;
+
+        assert_eq!(
+            fresh_quota_window_due_at(
+                reset_at,
+                FULL_QUOTA_WAKEUP_THRESHOLD,
+                None,
+                SECONDARY_WINDOW_FALLBACK_MINUTES,
+                None,
+                now_ts,
+            ),
+            Some(cycle_started_at)
+        );
+    }
+
+    #[test]
     fn fresh_secondary_window_skips_when_not_full() {
         let now_ts = 1_800_000_000;
         let reset_at = now_ts + SECONDARY_WINDOW_FALLBACK_MINUTES * 60;
@@ -488,5 +554,33 @@ mod tests {
             Some(PRIMARY_WINDOW_FALLBACK_MINUTES),
             PRIMARY_WINDOW_FALLBACK_MINUTES,
         ));
+    }
+
+    #[test]
+    fn quota_reset_candidate_waits_until_cycle_start() {
+        let now_ts = 1_800_000_000;
+        let candidate = QuotaResetCandidate {
+            account_id: "account-1".to_string(),
+            due_at: now_ts + 1,
+        };
+
+        assert!(due_quota_reset_accounts(vec![candidate], now_ts).is_none());
+    }
+
+    #[test]
+    fn quota_reset_candidate_runs_after_cycle_start() {
+        let now_ts = 1_800_000_000;
+        let candidate = QuotaResetCandidate {
+            account_id: "account-1".to_string(),
+            due_at: now_ts,
+        };
+
+        let Some((due_at, Some(account_ids))) = due_quota_reset_accounts(vec![candidate], now_ts)
+        else {
+            panic!("expected due account");
+        };
+
+        assert_eq!(due_at, now_ts);
+        assert_eq!(account_ids, vec!["account-1".to_string()]);
     }
 }
