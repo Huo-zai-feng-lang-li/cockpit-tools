@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.45] - 2026-05-25
+### Fixed
+- **Codex weekly quota sorting**: Account overview sorting now reads the actual 7d quota window for weekly quota order; descending order puts accounts with more quota first, while ascending order puts lower or exhausted accounts first. Quota sorting is no longer interrupted by current-account pinning.
+
 ## [0.20.41] - 2026-05-25
 ### Fixed
 - **Codex full-quota wakeup dedupe**: Accounts with any active quota reset countdown no longer get repeated fallback wakeups when another quota window is full and missing `reset_time`.
