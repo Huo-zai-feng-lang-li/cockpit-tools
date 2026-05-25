@@ -80,10 +80,14 @@ fn fresh_quota_window_due_at(
 fn full_quota_without_reset_due_at(
     percentage: i32,
     reset_at: Option<i64>,
+    has_active_reset_countdown: bool,
     last_run_at: Option<i64>,
     now_ts: i64,
 ) -> Option<i64> {
-    if reset_at.is_some() || percentage < FULL_QUOTA_WAKEUP_THRESHOLD {
+    let should_skip = reset_at.is_some()
+        || has_active_reset_countdown
+        || percentage < FULL_QUOTA_WAKEUP_THRESHOLD;
+    if should_skip {
         return None;
     }
 
@@ -95,6 +99,10 @@ fn full_quota_without_reset_due_at(
     }
 
     Some(now_ts)
+}
+
+fn has_active_reset_countdown(reset_at: Option<i64>, now_ts: i64) -> bool {
+    reset_at.map(|ts| ts > now_ts).unwrap_or(false)
 }
 
 fn collect_task_reset_timestamps(task: &codex_wakeup::CodexWakeupTask) -> Vec<i64> {
@@ -193,10 +201,14 @@ fn current_due_at(
                 let last_run_at = task.last_run_map.get(&account.id).cloned();
                 if let Some(quota) = account.quota {
                     let mut account_max_ts = 0i64;
+                    let account_has_active_reset_countdown =
+                        has_active_reset_countdown(quota.hourly_reset_time, now_ts)
+                            || has_active_reset_countdown(quota.weekly_reset_time, now_ts);
                     if include_primary {
                         if let Some(due_at) = full_quota_without_reset_due_at(
                             quota.hourly_percentage,
                             quota.hourly_reset_time,
+                            account_has_active_reset_countdown,
                             last_run_at,
                             now_ts,
                         ) {
@@ -222,6 +234,7 @@ fn current_due_at(
                         if let Some(due_at) = full_quota_without_reset_due_at(
                             quota.weekly_percentage,
                             quota.weekly_reset_time,
+                            account_has_active_reset_countdown,
                             last_run_at,
                             now_ts,
                         ) {

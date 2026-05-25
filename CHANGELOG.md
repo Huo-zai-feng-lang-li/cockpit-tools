@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.41] - 2026-05-25
+### Fixed
+- **Codex full-quota wakeup dedupe**: Accounts with any active quota reset countdown no longer get repeated fallback wakeups when another quota window is full and missing `reset_time`.
+
 ## [0.20.40] - 2026-05-24
 ### Added
 - **Codex Desktop wakeup runtime support**: Codex wakeup tasks can now discover the bundled desktop runtime instead of requiring only the system `codex` CLI.

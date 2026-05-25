@@ -598,7 +598,7 @@ dependencies = [
 
 [[package]]
 name = "cockpit-tools"
-version = "0.20.40"
+version = "0.20.41"
 dependencies = [
  "aes",
  "aes-gcm",
