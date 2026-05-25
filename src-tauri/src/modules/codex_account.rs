@@ -2,7 +2,7 @@ use crate::models::codex::{
     CodexAccount, CodexAccountIndex, CodexAccountSummary, CodexAuthFile, CodexAuthMode,
     CodexAuthTokens, CodexJwtPayload, CodexTokens,
 };
-use crate::modules::{account, codex_oauth, logger};
+use crate::modules::{account, codex_oauth, codex_wakeup, logger};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION};
 #[cfg(target_os = "macos")]
@@ -1053,6 +1053,24 @@ pub fn upsert_account(tokens: CodexTokens) -> Result<CodexAccount, String> {
     upsert_account_with_hints(tokens, None, None)
 }
 
+fn attach_new_account_to_quota_wakeup_tasks(account: &CodexAccount, is_new_account: bool) {
+    if !is_new_account || account.is_api_key_auth() {
+        return;
+    }
+
+    match codex_wakeup::add_account_to_enabled_quota_reset_tasks(&account.id) {
+        Ok(true) => logger::log_info(&format!(
+            "Codex 新账号已自动加入启用的额度满唤醒任务: account_id={}, email={}",
+            account.id, account.email
+        )),
+        Ok(false) => {}
+        Err(err) => logger::log_warn(&format!(
+            "Codex 新账号加入额度满唤醒任务失败: account_id={}, email={}, error={}",
+            account.id, account.email, err
+        )),
+    }
+}
+
 pub fn upsert_api_key_account(
     api_key: String,
     api_base_url: Option<String>,
@@ -1061,6 +1079,7 @@ pub fn upsert_api_key_account(
     let account_id = build_api_key_account_id(&api_key);
     let mut index = load_account_index();
     let existing = index.accounts.iter().position(|item| item.id == account_id);
+    let is_new_account = existing.is_none();
 
     let mut account = if let Some(pos) = existing {
         let existing_id = index.accounts[pos].id.clone();
@@ -1130,6 +1149,7 @@ pub fn upsert_api_key_account(
     }
 
     save_account_index(&index)?;
+    attach_new_account_to_quota_wakeup_tasks(&account, is_new_account);
 
     logger::log_info(&format!(
         "Codex API Key 账号已保存: account_id={}, email={}, has_base_url={}",
@@ -1171,6 +1191,7 @@ fn upsert_account_with_hints(
     )
     .unwrap_or_else(|| generated_id.clone());
     let existing = index.accounts.iter().position(|a| a.id == existing_id);
+    let is_new_account = existing.is_none();
 
     let account = if let Some(pos) = existing {
         // 更新现有账号
@@ -1228,6 +1249,7 @@ fn upsert_account_with_hints(
     }
 
     save_account_index(&index)?;
+    attach_new_account_to_quota_wakeup_tasks(&account, is_new_account);
 
     logger::log_info(&format!(
         "Codex 账号已保存: email={}, account_id={:?}, organization_id={:?}",

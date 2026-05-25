@@ -1275,6 +1275,32 @@ fn normalize_task(raw: &CodexWakeupTask) -> CodexWakeupTask {
     }
 }
 
+fn append_account_to_enabled_quota_reset_tasks(
+    state: &mut CodexWakeupState,
+    account_id: &str,
+) -> bool {
+    let account_id = account_id.trim();
+    if account_id.is_empty() || !state.enabled {
+        return false;
+    }
+
+    let now = now_ts();
+    let mut changed = false;
+    for task in &mut state.tasks {
+        let is_enabled_quota_reset = task.enabled && task.schedule.kind == "quota_reset";
+        let already_selected = task.account_ids.iter().any(|item| item == account_id);
+        if !is_enabled_quota_reset || already_selected {
+            continue;
+        }
+
+        task.account_ids.push(account_id.to_string());
+        task.updated_at = now;
+        changed = true;
+    }
+
+    changed
+}
+
 fn disable_tasks_when_cli_missing_with_runtime(
     state: &mut CodexWakeupState,
     runtime_available: bool,
@@ -1393,7 +1419,10 @@ pub fn load_overview() -> Result<CodexWakeupOverview, String> {
     })
 }
 
-pub fn save_state(next_state: &CodexWakeupState) -> Result<CodexWakeupState, String> {
+fn save_state_inner(
+    next_state: &CodexWakeupState,
+    apply_cli_guard: bool,
+) -> Result<CodexWakeupState, String> {
     let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
     let mut seen = HashSet::new();
     let mut preset_seen = HashSet::new();
@@ -1415,11 +1444,27 @@ pub fn save_state(next_state: &CodexWakeupState) -> Result<CodexWakeupState, Str
             .collect(),
     };
 
-    disable_tasks_when_cli_missing(&mut state);
+    if apply_cli_guard {
+        disable_tasks_when_cli_missing(&mut state);
+    }
     refresh_next_run_at(&mut state);
 
     save_json_atomic(&tasks_path()?, &state)?;
     Ok(state)
+}
+
+pub fn save_state(next_state: &CodexWakeupState) -> Result<CodexWakeupState, String> {
+    save_state_inner(next_state, true)
+}
+
+pub fn add_account_to_enabled_quota_reset_tasks(account_id: &str) -> Result<bool, String> {
+    let mut state = load_state_for_scheduler()?;
+    if !append_account_to_enabled_quota_reset_tasks(&mut state, account_id) {
+        return Ok(false);
+    }
+
+    save_state_inner(&state, false)?;
+    Ok(true)
 }
 
 pub fn load_history() -> Result<Vec<CodexWakeupHistoryItem>, String> {

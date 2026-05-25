@@ -11,8 +11,7 @@ static RUNNING_TASKS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 const FULL_QUOTA_WAKEUP_THRESHOLD: i32 = 95;
 const PRIMARY_WINDOW_FALLBACK_MINUTES: i64 = 5 * 60;
 const SECONDARY_WINDOW_FALLBACK_MINUTES: i64 = 7 * 24 * 60;
-const FRESH_WINDOW_GRACE_SECONDS: i64 = 12 * 60 * 60;
-const FULL_QUOTA_WITHOUT_RESET_COOLDOWN_SECONDS: i64 = 6 * 24 * 60 * 60;
+const FRESH_WINDOW_GRACE_SECONDS: i64 = 60;
 
 fn started_flag() -> &'static Mutex<bool> {
     STARTED.get_or_init(|| Mutex::new(false))
@@ -62,13 +61,15 @@ fn fresh_quota_window_due_at(
 
     let window_seconds = window_minutes.unwrap_or(fallback_window_minutes).max(1) * 60;
     let remaining_seconds = reset_at.saturating_sub(now_ts);
-    if remaining_seconds + FRESH_WINDOW_GRACE_SECONDS < window_seconds {
+    let countdown_started = remaining_seconds + FRESH_WINDOW_GRACE_SECONDS < window_seconds;
+    let countdown_not_started = remaining_seconds > window_seconds + FRESH_WINDOW_GRACE_SECONDS;
+    if countdown_started || countdown_not_started {
         return None;
     }
 
     let cycle_started_at = reset_at.saturating_sub(window_seconds);
     let already_processed = last_run_at
-        .map(|value| value >= cycle_started_at.saturating_sub(FRESH_WINDOW_GRACE_SECONDS))
+        .map(|value| value >= cycle_started_at)
         .unwrap_or(false);
     if already_processed {
         return None;
@@ -77,68 +78,25 @@ fn fresh_quota_window_due_at(
     Some(i64::max(cycle_started_at, now_ts))
 }
 
-fn full_quota_without_reset_due_at(
-    percentage: i32,
-    reset_at: Option<i64>,
-    has_active_reset_countdown: bool,
-    last_run_at: Option<i64>,
-    now_ts: i64,
-) -> Option<i64> {
-    let should_skip = reset_at.is_some()
-        || has_active_reset_countdown
-        || percentage < FULL_QUOTA_WAKEUP_THRESHOLD;
-    if should_skip {
-        return None;
-    }
-
-    if last_run_at
-        .map(|value| now_ts.saturating_sub(value) < FULL_QUOTA_WITHOUT_RESET_COOLDOWN_SECONDS)
-        .unwrap_or(false)
-    {
-        return None;
-    }
-
-    Some(now_ts)
+fn quota_window_is_7d(window_minutes: Option<i64>, fallback_window_minutes: i64) -> bool {
+    window_minutes.unwrap_or(fallback_window_minutes).max(1) >= SECONDARY_WINDOW_FALLBACK_MINUTES
 }
 
-fn has_active_reset_countdown(reset_at: Option<i64>, now_ts: i64) -> bool {
-    reset_at.map(|ts| ts > now_ts).unwrap_or(false)
-}
-
-fn collect_task_reset_timestamps(task: &codex_wakeup::CodexWakeupTask) -> Vec<i64> {
-    if task.account_ids.is_empty() {
-        return Vec::new();
+fn quota_window_matches_filter(
+    quota_reset_window: &str,
+    api_window_key: &str,
+    window_minutes: Option<i64>,
+    fallback_window_minutes: i64,
+) -> bool {
+    match quota_reset_window {
+        "either" => true,
+        "primary_window" => api_window_key == "primary_window",
+        "secondary_window" => {
+            api_window_key == "secondary_window"
+                || quota_window_is_7d(window_minutes, fallback_window_minutes)
+        }
+        _ => false,
     }
-    let quota_reset_window = task
-        .schedule
-        .quota_reset_window
-        .as_deref()
-        .unwrap_or("either");
-    let include_primary = quota_reset_window == "either" || quota_reset_window == "primary_window";
-    let include_secondary =
-        quota_reset_window == "either" || quota_reset_window == "secondary_window";
-
-    let selected: HashSet<&str> = task.account_ids.iter().map(String::as_str).collect();
-    let mut timestamps: Vec<i64> = codex_account::list_accounts()
-        .into_iter()
-        .filter(|account| selected.contains(account.id.as_str()))
-        .flat_map(|account| account.quota.into_iter())
-        .flat_map(|quota| {
-            let mut values = Vec::new();
-            if include_primary {
-                values.push(quota.hourly_reset_time);
-            }
-            if include_secondary {
-                values.push(quota.weekly_reset_time);
-            }
-            values
-        })
-        .flatten()
-        .filter(|ts| *ts > 0)
-        .collect();
-    timestamps.sort_unstable();
-    timestamps.dedup();
-    timestamps
 }
 
 fn current_due_at(
@@ -189,10 +147,6 @@ fn current_due_at(
                 .quota_reset_window
                 .as_deref()
                 .unwrap_or("either");
-            let include_primary =
-                quota_reset_window == "either" || quota_reset_window == "primary_window";
-            let include_secondary =
-                quota_reset_window == "either" || quota_reset_window == "secondary_window";
 
             for account in codex_account::list_accounts() {
                 if !selected.contains(account.id.as_str()) {
@@ -201,23 +155,20 @@ fn current_due_at(
                 let last_run_at = task.last_run_map.get(&account.id).cloned();
                 if let Some(quota) = account.quota {
                     let mut account_max_ts = 0i64;
-                    let account_has_active_reset_countdown =
-                        has_active_reset_countdown(quota.hourly_reset_time, now_ts)
-                            || has_active_reset_countdown(quota.weekly_reset_time, now_ts);
+                    let include_primary = quota_window_matches_filter(
+                        quota_reset_window,
+                        "primary_window",
+                        quota.hourly_window_minutes,
+                        PRIMARY_WINDOW_FALLBACK_MINUTES,
+                    );
+                    let include_secondary = quota_window_matches_filter(
+                        quota_reset_window,
+                        "secondary_window",
+                        quota.weekly_window_minutes,
+                        SECONDARY_WINDOW_FALLBACK_MINUTES,
+                    );
                     if include_primary {
-                        if let Some(due_at) = full_quota_without_reset_due_at(
-                            quota.hourly_percentage,
-                            quota.hourly_reset_time,
-                            account_has_active_reset_countdown,
-                            last_run_at,
-                            now_ts,
-                        ) {
-                            account_max_ts = i64::max(account_max_ts, due_at);
-                        }
                         if let Some(ts) = quota.hourly_reset_time {
-                            if ts <= now_ts && ts > last_run_at.unwrap_or(task.created_at) {
-                                account_max_ts = i64::max(account_max_ts, ts);
-                            }
                             if let Some(due_at) = fresh_quota_window_due_at(
                                 ts,
                                 quota.hourly_percentage,
@@ -231,19 +182,7 @@ fn current_due_at(
                         }
                     }
                     if include_secondary {
-                        if let Some(due_at) = full_quota_without_reset_due_at(
-                            quota.weekly_percentage,
-                            quota.weekly_reset_time,
-                            account_has_active_reset_countdown,
-                            last_run_at,
-                            now_ts,
-                        ) {
-                            account_max_ts = i64::max(account_max_ts, due_at);
-                        }
                         if let Some(ts) = quota.weekly_reset_time {
-                            if ts <= now_ts && ts > last_run_at.unwrap_or(task.created_at) {
-                                account_max_ts = i64::max(account_max_ts, ts);
-                            }
                             if let Some(due_at) = fresh_quota_window_due_at(
                                 ts,
                                 quota.weekly_percentage,
@@ -308,14 +247,7 @@ pub fn calculate_next_run_at(task: &codex_wakeup::CodexWakeupTask) -> Option<i64
                 i64::from(task.schedule.interval_hours.unwrap_or(4).max(1)) * 3600;
             Some(task.last_run_at.unwrap_or(task.created_at) + interval_seconds)
         }
-        "quota_reset" => current_due_at(task, now)
-            .map(|(due_at, _)| due_at)
-            .or_else(|| {
-                collect_task_reset_timestamps(task)
-                    .into_iter()
-                    .filter(|reset_at| *reset_at > now.timestamp())
-                    .min()
-            }),
+        "quota_reset" => current_due_at(task, now).map(|(due_at, _)| due_at),
         _ => None,
     }
 }
@@ -442,4 +374,119 @@ pub fn ensure_started(app: AppHandle) {
             sleep(Duration::from_secs(30)).await;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fresh_secondary_window_is_due_when_full_and_7d_left() {
+        let now_ts = 1_800_000_000;
+        let reset_at = now_ts + SECONDARY_WINDOW_FALLBACK_MINUTES * 60;
+
+        assert_eq!(
+            fresh_quota_window_due_at(
+                reset_at,
+                FULL_QUOTA_WAKEUP_THRESHOLD,
+                None,
+                SECONDARY_WINDOW_FALLBACK_MINUTES,
+                None,
+                now_ts,
+            ),
+            Some(now_ts)
+        );
+    }
+
+    #[test]
+    fn fresh_secondary_window_skips_when_not_full() {
+        let now_ts = 1_800_000_000;
+        let reset_at = now_ts + SECONDARY_WINDOW_FALLBACK_MINUTES * 60;
+
+        assert_eq!(
+            fresh_quota_window_due_at(
+                reset_at,
+                FULL_QUOTA_WAKEUP_THRESHOLD - 1,
+                None,
+                SECONDARY_WINDOW_FALLBACK_MINUTES,
+                None,
+                now_ts,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn fresh_secondary_window_skips_when_countdown_already_started() {
+        let now_ts = 1_800_000_000;
+        let reset_at = now_ts + SECONDARY_WINDOW_FALLBACK_MINUTES * 60 - 61;
+
+        assert_eq!(
+            fresh_quota_window_due_at(
+                reset_at,
+                FULL_QUOTA_WAKEUP_THRESHOLD,
+                None,
+                SECONDARY_WINDOW_FALLBACK_MINUTES,
+                None,
+                now_ts,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn fresh_secondary_window_skips_when_reset_is_beyond_7d() {
+        let now_ts = 1_800_000_000;
+        let reset_at = now_ts + SECONDARY_WINDOW_FALLBACK_MINUTES * 60 + 61;
+
+        assert_eq!(
+            fresh_quota_window_due_at(
+                reset_at,
+                FULL_QUOTA_WAKEUP_THRESHOLD,
+                None,
+                SECONDARY_WINDOW_FALLBACK_MINUTES,
+                None,
+                now_ts,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn fresh_secondary_window_skips_after_current_cycle_processed() {
+        let now_ts = 1_800_000_000;
+        let reset_at = now_ts + SECONDARY_WINDOW_FALLBACK_MINUTES * 60;
+
+        assert_eq!(
+            fresh_quota_window_due_at(
+                reset_at,
+                FULL_QUOTA_WAKEUP_THRESHOLD,
+                None,
+                SECONDARY_WINDOW_FALLBACK_MINUTES,
+                Some(now_ts),
+                now_ts,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn secondary_filter_matches_primary_api_window_when_it_is_7d() {
+        assert!(quota_window_matches_filter(
+            "secondary_window",
+            "primary_window",
+            Some(SECONDARY_WINDOW_FALLBACK_MINUTES),
+            PRIMARY_WINDOW_FALLBACK_MINUTES,
+        ));
+    }
+
+    #[test]
+    fn secondary_filter_skips_primary_api_window_when_it_is_not_7d() {
+        assert!(!quota_window_matches_filter(
+            "secondary_window",
+            "primary_window",
+            Some(PRIMARY_WINDOW_FALLBACK_MINUTES),
+            PRIMARY_WINDOW_FALLBACK_MINUTES,
+        ));
+    }
 }

@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.42] - 2026-05-25
+### Fixed
+- **Codex 7d full-quota wakeup detection**: Wakeups now fire only for task-pool accounts that are still at the exact 7d reset window and meet the quota threshold; accounts already counting down at `6d 23h...` no longer retrigger.
+- **Codex quota window detection**: Handles API responses that expose the 7d quota window through `primary_window`, while `secondary_window` wakeup tasks still identify the correct 7d full-quota accounts.
+- **Codex new-account task coverage**: Newly added OAuth Codex accounts are automatically added to enabled full-quota wakeup tasks so the account pool and task pool do not drift.
+
 ## [0.20.41] - 2026-05-25
 ### Fixed
 - **Codex full-quota wakeup dedupe**: Accounts with any active quota reset countdown no longer get repeated fallback wakeups when another quota window is full and missing `reset_time`.
