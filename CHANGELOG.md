@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.47] - 2026-05-26
+### Fixed
+- **Cross-platform compilation error**: Fixed compile failures on non-Windows platforms (like Linux/macOS) due to missing `RuntimeTokens` type and related helper function gating.
+- **Compiler warnings cleanup**: Fixed various target-specific unused variables and dead-code compiler warnings in multiple modules (including floating card window, process, quota, and zed accounts).
+
 ## [0.20.46] - 2026-05-26
 ### Added
 - **Codex Antigravity plugin hot switch**: Switch Codex accounts through the Antigravity Codex plugin runtime without restarting or rewriting `auth.json`.
