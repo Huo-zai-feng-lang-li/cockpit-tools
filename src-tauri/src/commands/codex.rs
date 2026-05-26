@@ -1,13 +1,22 @@
 use crate::models::codex::{CodexAccount, CodexQuota, CodexTokens};
 use crate::modules::{
-    codex_account, codex_oauth, codex_quota, codex_wakeup, codex_wakeup_scheduler, config, logger,
-    openclaw_auth, opencode_auth, process,
+    codex_account, codex_oauth, codex_quota, codex_runtime_bridge, codex_wakeup,
+    codex_wakeup_scheduler, config, logger, openclaw_auth, opencode_auth, process,
 };
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::AppHandle;
 use tauri::Emitter;
 
 static CODEX_POST_REFRESH_CHECK_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodexHotSwitchResponse {
+    pub account: CodexAccount,
+    pub runtime: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rate_limits: Option<serde_json::Value>,
+}
 
 /// 列出所有 Codex 账号
 #[tauri::command]
@@ -126,6 +135,40 @@ pub async fn switch_codex_account(
     Ok(account)
 }
 
+/// 运行时无感热切 Codex 账号：不写 auth.json，不启动/重启 Codex。
+#[tauri::command]
+pub async fn hot_switch_codex_account(
+    app: AppHandle,
+    account_id: String,
+) -> Result<CodexHotSwitchResponse, String> {
+    let prepared = codex_account::prepare_account_for_injection(&account_id).await?;
+    logger::log_info(&format!(
+        "[Codex HotSwitch] 开始运行时热切: account_id={}, email={}",
+        prepared.id, prepared.email
+    ));
+
+    let runtime = codex_runtime_bridge::hot_switch_account(&prepared).await?;
+    let account = codex_account::activate_account_after_runtime_switch(&account_id)?;
+
+    if let Err(e) = crate::modules::codex_instance::update_default_settings(
+        Some(Some(account_id.clone())),
+        None,
+        Some(false),
+    ) {
+        logger::log_warn(&format!(
+            "[Codex HotSwitch] 更新 Codex 默认实例绑定账号失败: {}",
+            e
+        ));
+    }
+
+    let _ = crate::modules::tray::update_tray_menu(&app);
+    Ok(CodexHotSwitchResponse {
+        account,
+        runtime: runtime.runtime,
+        rate_limits: runtime.rate_limits,
+    })
+}
+
 async fn run_codex_post_refresh_checks(app: &AppHandle) {
     if CODEX_POST_REFRESH_CHECK_IN_PROGRESS.swap(true, Ordering::SeqCst) {
         logger::log_info("[AutoSwitch][Codex] 后置检查进行中，跳过本次执行");
@@ -137,11 +180,11 @@ async fn run_codex_post_refresh_checks(app: &AppHandle) {
     match codex_account::pick_auto_switch_target_if_needed() {
         Ok(Some(target)) => {
             let target_id = target.id.clone();
-            match switch_codex_account(app.clone(), target_id.clone()).await {
-                Ok(switched_account) => {
+            match hot_switch_codex_account(app.clone(), target_id.clone()).await {
+                Ok(response) => {
                     logger::log_info(&format!(
-                        "[AutoSwitch][Codex] 自动切号完成: target_id={}, email={}",
-                        switched_account.id, switched_account.email
+                        "[AutoSwitch][Codex] 自动热切完成: target_id={}, email={}, runtime={}",
+                        response.account.id, response.account.email, response.runtime
                     ));
                     switched = true;
                 }

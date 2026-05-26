@@ -470,7 +470,10 @@ async fn send_stream_request(
                 client
                     .post(&url)
                     .bearer_auth(access_token)
-                    .header(reqwest::header::USER_AGENT, crate::modules::quota::build_cloud_code_user_agent())
+                    .header(
+                        reqwest::header::USER_AGENT,
+                        crate::modules::quota::build_cloud_code_user_agent(),
+                    )
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .header(reqwest::header::ACCEPT_ENCODING, "gzip")
                     .json(body)
@@ -836,7 +839,10 @@ async fn resolve_requested_model_for_official_ls(
                 client
                     .post(&url)
                     .bearer_auth(&token.access_token)
-                    .header(reqwest::header::USER_AGENT, crate::modules::quota::build_cloud_code_user_agent())
+                    .header(
+                        reqwest::header::USER_AGENT,
+                        crate::modules::quota::build_cloud_code_user_agent(),
+                    )
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .header(reqwest::header::ACCEPT_ENCODING, "gzip")
                     .json(&payload)
@@ -2063,7 +2069,10 @@ async fn fetch_available_models_from_access_token(
             let response = client
                 .post(url)
                 .bearer_auth(access_token)
-                .header(reqwest::header::USER_AGENT, crate::modules::quota::build_cloud_code_user_agent())
+                .header(
+                    reqwest::header::USER_AGENT,
+                    crate::modules::quota::build_cloud_code_user_agent(),
+                )
                 .header(reqwest::header::CONTENT_TYPE, "application/json")
                 .header(reqwest::header::ACCEPT_ENCODING, "gzip")
                 .json(&payload)

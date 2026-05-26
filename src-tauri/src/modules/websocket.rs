@@ -769,10 +769,7 @@ async fn handle_client_message(
                 tokio::spawn(async move {
                     // 1. 立即刷新当前账号配额
                     if let Err(e) = reactive_quota_refresh_and_switch().await {
-                        crate::modules::logger::log_warn(&format!(
-                            "[WS] 紧急刷新切号失败: {}",
-                            e
-                        ));
+                        crate::modules::logger::log_warn(&format!("[WS] 紧急刷新切号失败: {}", e));
                     }
                     // 2. 通知前端刷新
                     let changed_msg = WsMessage::DataChanged {
@@ -1033,15 +1030,16 @@ async fn reactive_quota_refresh_and_switch() -> Result<(), String> {
     crate::modules::logger::log_warn("[ReactiveSwitch] 🚨 开始紧急刷新当前账号配额...");
 
     // 1. 获取当前账号并刷新配额
-    let current = crate::modules::get_current_account()
-        .map_err(|e| format!("获取当前账号失败: {}", e))?;
+    let current =
+        crate::modules::get_current_account().map_err(|e| format!("获取当前账号失败: {}", e))?;
     let Some(mut account) = current else {
         return Err("未找到当前账号".to_string());
     };
 
-    let quota: crate::models::QuotaData = crate::modules::fetch_quota_with_delayed_retry(&mut account, true)
-        .await
-        .map_err(|e| format!("紧急配额刷新失败: {}", e))?;
+    let quota: crate::models::QuotaData =
+        crate::modules::fetch_quota_with_delayed_retry(&mut account, true)
+            .await
+            .map_err(|e| format!("紧急配额刷新失败: {}", e))?;
     crate::modules::update_account_quota(&account.id, quota)
         .map_err(|e| format!("更新配额失败: {}", e))?;
 
@@ -1065,17 +1063,11 @@ async fn reactive_quota_refresh_and_switch() -> Result<(), String> {
             );
             // 即使未切号，也尝试执行预警
             if let Err(e) = crate::modules::account::run_quota_alert_if_needed() {
-                crate::modules::logger::log_warn(&format!(
-                    "[ReactiveSwitch] 预警检查失败: {}",
-                    e
-                ));
+                crate::modules::logger::log_warn(&format!("[ReactiveSwitch] 预警检查失败: {}", e));
             }
         }
         Err(e) => {
-            crate::modules::logger::log_warn(&format!(
-                "[ReactiveSwitch] 自动切号执行失败: {}",
-                e
-            ));
+            crate::modules::logger::log_warn(&format!("[ReactiveSwitch] 自动切号执行失败: {}", e));
         }
     }
 

@@ -1094,7 +1094,6 @@ fn evaluate_velocity_prediction(
     hits
 }
 
-
 #[derive(Debug, Clone)]
 struct AutoSwitchGroupDefinition {
     id: String,

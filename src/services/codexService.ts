@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { CodexAccount, CodexQuota } from '../types/codex';
+import { CodexAccount, CodexHotSwitchResponse, CodexQuota } from '../types/codex';
 
 export interface CodexOAuthLoginStartResponse {
   loginId: string;
@@ -24,6 +24,11 @@ export async function refreshCodexAccountProfile(accountId: string): Promise<Cod
 /** 切换 Codex 账号 */
 export async function switchCodexAccount(accountId: string): Promise<CodexAccount> {
   return await invoke('switch_codex_account', { accountId });
+}
+
+/** 运行时无感热切 Codex 账号 */
+export async function hotSwitchCodexAccount(accountId: string): Promise<CodexHotSwitchResponse> {
+  return await invoke('hot_switch_codex_account', { accountId });
 }
 
 /** 删除 Codex 账号 */

@@ -32,6 +32,12 @@ export interface CodexTokens {
   refresh_token?: string;
 }
 
+export interface CodexHotSwitchResponse {
+  account: CodexAccount;
+  runtime: string;
+  rate_limits?: unknown;
+}
+
 /** Codex 配额数据 */
 export interface CodexQuota {
   /** 5小时配额百分比 (0-100) */

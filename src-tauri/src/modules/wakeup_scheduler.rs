@@ -132,10 +132,11 @@ fn load_state() -> (HashMap<String, ResetState>, HashMap<String, i64>) {
     if content.is_empty() {
         return (HashMap::new(), HashMap::new());
     }
-    let persisted: PersistedState = serde_json::from_str(&content).unwrap_or_else(|_| PersistedState {
-        reset_states: HashMap::new(),
-        last_executed_at: HashMap::new(),
-    });
+    let persisted: PersistedState =
+        serde_json::from_str(&content).unwrap_or_else(|_| PersistedState {
+            reset_states: HashMap::new(),
+            last_executed_at: HashMap::new(),
+        });
     (persisted.reset_states, persisted.last_executed_at)
 }
 

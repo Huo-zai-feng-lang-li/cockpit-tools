@@ -908,7 +908,6 @@ pub async fn fetch_project_id_with_context(
     (None, subscription_tier, credits)
 }
 
-
 fn build_quota_data_from_response(
     quota_response: QuotaResponse,
     subscription_tier: Option<String>,

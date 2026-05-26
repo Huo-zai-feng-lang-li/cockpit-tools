@@ -140,16 +140,14 @@ fn schedule_accelerated_recheck(app: tauri::AppHandle, current_lowest_pct: i32) 
         modules::logger::log_info("[DynamicSampling] ⏩ 执行加速复检...");
 
         let result: Result<(), String> = async {
-            let Some(mut account) =
-                modules::get_current_account().map_err(|e| e.to_string())?
+            let Some(mut account) = modules::get_current_account().map_err(|e| e.to_string())?
             else {
                 return Ok(());
             };
             let quota = modules::fetch_quota_with_delayed_retry(&mut account, true)
                 .await
                 .map_err(|e| e.to_string())?;
-            modules::update_account_quota(&account.id, quota.clone())
-                .map_err(|e| e.to_string())?;
+            modules::update_account_quota(&account.id, quota.clone()).map_err(|e| e.to_string())?;
 
             match modules::account::run_auto_switch_if_needed().await {
                 Ok(Some(switched)) => {
@@ -160,7 +158,12 @@ fn schedule_accelerated_recheck(app: tauri::AppHandle, current_lowest_pct: i32) 
                 }
                 Ok(None) => {
                     // 还没触发切号，检查是否需要继续加速
-                    let lowest = quota.models.iter().map(|m| m.percentage).min().unwrap_or(100);
+                    let lowest = quota
+                        .models
+                        .iter()
+                        .map(|m| m.percentage)
+                        .min()
+                        .unwrap_or(100);
                     if lowest < 30 {
                         schedule_accelerated_recheck(app_clone.clone(), lowest);
                     }

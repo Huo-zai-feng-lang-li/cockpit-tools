@@ -14,6 +14,7 @@ const CODEX_CURRENT_ACCOUNT_CACHE_KEY = 'agtools.codex.accounts.current';
 const CODEX_PROFILE_SYNC_IN_FLIGHT = new Set<string>();
 const CODEX_PROFILE_SYNC_LAST_ATTEMPT = new Map<string, number>();
 const CODEX_PROFILE_SYNC_RETRY_INTERVAL_MS = 5 * 60 * 1000;
+let codexCurrentAccountEpoch = 0;
 
 const loadCachedCodexAccounts = () => {
   try {
@@ -70,6 +71,7 @@ interface CodexAccountState {
   fetchAccounts: () => Promise<void>;
   fetchCurrentAccount: () => Promise<void>;
   switchAccount: (accountId: string) => Promise<CodexAccount>;
+  hotSwitchAccount: (accountId: string) => Promise<CodexAccount>;
   deleteAccount: (accountId: string) => Promise<void>;
   deleteAccounts: (accountIds: string[]) => Promise<void>;
   refreshQuota: (accountId: string) => Promise<CodexQuota>;
@@ -105,8 +107,10 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
   },
   
   fetchCurrentAccount: async () => {
+    const requestEpoch = codexCurrentAccountEpoch;
     try {
       const currentAccount = await codexService.getCurrentCodexAccount();
+      if (requestEpoch !== codexCurrentAccountEpoch) return;
       set({ currentAccount });
       persistCodexCurrentAccountCache(currentAccount);
     } catch (e) {
@@ -114,17 +118,31 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     }
   },
   
-  switchAccount: async (accountId: string) => {
-    const account = await codexService.switchCodexAccount(accountId);
-    set({ currentAccount: account });
+  hotSwitchAccount: async (accountId: string) => {
+    codexCurrentAccountEpoch += 1;
+    const response = await codexService.hotSwitchCodexAccount(accountId);
+    const account = response.account;
+    codexCurrentAccountEpoch += 1;
+    set((state) => {
+      const nextAccounts = state.accounts.map((item) =>
+        item.id === account.id ? { ...item, ...account } : item,
+      );
+      persistCodexAccountsCache(nextAccounts);
+      persistCodexCurrentAccountCache(account);
+      return { accounts: nextAccounts, currentAccount: account };
+    });
     await get().fetchAccounts();
+    set({ currentAccount: account });
+    persistCodexCurrentAccountCache(account);
     await emitCurrentAccountChanged({
       platformId: 'codex',
       accountId: account.id,
-      reason: 'switch',
+      reason: 'hot_switch',
     });
     return account;
   },
+
+  switchAccount: async (accountId: string) => get().hotSwitchAccount(accountId),
   
   deleteAccount: async (accountId: string) => {
     const previousCurrentAccountId = get().currentAccount?.id ?? null;

@@ -46,6 +46,7 @@ import {
   hasCodexAccountStructure,
   formatCodexLoginProvider,
   getCodexAuthMetadata,
+  getCodexQuotaWindows,
   hasCodexAccountName,
   isCodexApiKeyAccount,
   isCodexTeamLikePlan,
@@ -301,7 +302,7 @@ export function CodexAccountsPage() {
     currentAccount,
     fetchAccounts,
     fetchCurrentAccount,
-    switchAccount,
+    hotSwitchAccount,
     refreshQuota,
     hydrateAccountProfilesIfNeeded,
     updateAccountName,
@@ -679,10 +680,21 @@ export function CodexAccountsPage() {
     setMessage(null);
     setSwitching(accountId);
     try {
-      const account = await switchAccount(accountId);
-      setMessage({ text: t('codex.switched', { email: maskAccountText(account.email) }) });
+      const account = await hotSwitchAccount(accountId);
+      setMessage({
+        text: t(
+          'codex.hotSwitch.success',
+          '无感热切成功: {{email}}',
+        ).replace('{{email}}', maskAccountText(account.email)),
+      });
     } catch (e) {
-      setMessage({ text: t('codex.switchFailed', { error: String(e) }), tone: 'error' });
+      setMessage({
+        text: t(
+          'codex.hotSwitch.failed',
+          '无感热切失败，不会自动重启或写入 auth.json: {{error}}',
+        ).replace('{{error}}', String(e)),
+        tone: 'error',
+      });
     }
     setSwitching(null);
   };
@@ -1143,6 +1155,36 @@ export function CodexAccountsPage() {
   ], [tierCounts]);
 
   // ─── Filtering & Sorting ────────────────────────────────────────────
+  const getQuotaSortValue = useCallback((account: CodexAccount, target: 'hourly' | 'weekly') => {
+    const windows = getCodexQuotaWindows(account.quota);
+    const matchedWindow = windows.find((window) => {
+      if (target === 'weekly') {
+        return window.id === 'secondary' || (window.windowMinutes ?? 0) >= 24 * 60;
+      }
+      return window.id === 'primary' && (window.windowMinutes ?? 0) < 24 * 60;
+    });
+
+    if (matchedWindow) return matchedWindow.percentage;
+    return target === 'weekly'
+      ? account.quota?.weekly_percentage ?? null
+      : account.quota?.hourly_percentage ?? null;
+  }, []);
+
+  const getQuotaResetSortValue = useCallback((account: CodexAccount, target: 'hourly' | 'weekly') => {
+    const windows = getCodexQuotaWindows(account.quota);
+    const matchedWindow = windows.find((window) => {
+      if (target === 'weekly') {
+        return window.id === 'secondary' || (window.windowMinutes ?? 0) >= 24 * 60;
+      }
+      return window.id === 'primary' && (window.windowMinutes ?? 0) < 24 * 60;
+    });
+
+    if (matchedWindow?.resetTime != null) return matchedWindow.resetTime;
+    return target === 'weekly'
+      ? account.quota?.weekly_reset_time ?? null
+      : account.quota?.hourly_reset_time ?? null;
+  }, []);
+
   const compareAccountsBySort = useCallback((a: CodexAccount, b: CodexAccount) => {
     const currentFirstDiff = compareCurrentAccountFirst(a.id, b.id, currentAccount?.id);
     if (currentFirstDiff !== 0) {
@@ -1153,18 +1195,25 @@ export function CodexAccountsPage() {
       const diff = b.created_at - a.created_at;
       return sortDirection === 'desc' ? diff : -diff;
     }
+
     if (sortBy === 'weekly_reset' || sortBy === 'hourly_reset') {
-      const aR = sortBy === 'weekly_reset' ? a.quota?.weekly_reset_time ?? null : a.quota?.hourly_reset_time ?? null;
-      const bR = sortBy === 'weekly_reset' ? b.quota?.weekly_reset_time ?? null : b.quota?.hourly_reset_time ?? null;
+      const target = sortBy === 'weekly_reset' ? 'weekly' : 'hourly';
+      const aR = getQuotaResetSortValue(a, target);
+      const bR = getQuotaResetSortValue(b, target);
       if (aR == null && bR == null) return 0;
       if (aR == null) return 1;
       if (bR == null) return -1;
       return sortDirection === 'desc' ? bR - aR : aR - bR;
     }
-    const aV = sortBy === 'weekly' ? a.quota?.weekly_percentage ?? -1 : a.quota?.hourly_percentage ?? -1;
-    const bV = sortBy === 'weekly' ? b.quota?.weekly_percentage ?? -1 : b.quota?.hourly_percentage ?? -1;
+
+    const target = sortBy === 'weekly' ? 'weekly' : 'hourly';
+    const aV = getQuotaSortValue(a, target);
+    const bV = getQuotaSortValue(b, target);
+    if (aV == null && bV == null) return 0;
+    if (aV == null) return 1;
+    if (bV == null) return -1;
     return sortDirection === 'desc' ? bV - aV : aV - bV;
-  }, [currentAccount?.id, sortBy, sortDirection]);
+  }, [currentAccount?.id, getQuotaResetSortValue, getQuotaSortValue, sortBy, sortDirection]);
 
   const sortedAccountsForInstances = useMemo(
     () => [...accounts].sort(compareAccountsBySort),
