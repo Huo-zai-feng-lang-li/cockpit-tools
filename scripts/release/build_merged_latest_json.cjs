@@ -49,10 +49,22 @@ function buildUrl(repo, version, fileName) {
   return `https://github.com/${repo}/releases/download/v${version}/${encoded}`;
 }
 
-function findAsset(assets, pattern, label) {
-  const hit = assets.find((name) => pattern.test(name));
+function matchesPattern(name, pattern) {
+  return typeof pattern === 'function' ? pattern(name) : pattern.test(name);
+}
+
+function describePatterns(patterns) {
+  return patterns.map((pattern) => pattern.toString()).join(', ');
+}
+
+function findAsset(assets, patterns, label) {
+  const matchers = Array.isArray(patterns) ? patterns : [patterns];
+  const hit = assets.find((name) => matchers.some((pattern) => matchesPattern(name, pattern)));
   if (!hit) {
-    throw new Error(`Missing required updater asset for ${label}. Pattern: ${pattern}`);
+    const available = assets.length ? assets.join(', ') : '(none)';
+    throw new Error(
+      `Missing required updater asset for ${label}. Patterns: ${describePatterns(matchers)}. Available assets: ${available}`
+    );
   }
   return hit;
 }
@@ -103,8 +115,24 @@ function main() {
     (name) => !name.endsWith('.sig') && name !== 'latest.json' && name !== 'SHA256SUMS.txt'
   );
 
-  const darwinAarch64Tar = findAsset(assets, /_aarch64\.app\.tar\.gz$/, 'darwin-aarch64');
-  const darwinX64Tar = findAsset(assets, /_x64\.app\.tar\.gz$/, 'darwin-x86_64');
+  const darwinAarch64Tar = findAsset(
+    assets,
+    [
+      /_(aarch64|arm64)\.app\.tar\.gz$/,
+      /(?:^|[_-])(aarch64|arm64)(?:-apple-darwin)?\.app\.tar\.gz$/,
+      (name) => /\.app\.tar\.gz$/.test(name) && /(?:^|[_-])(aarch64|arm64)(?:[_-]|\.|$)/.test(name),
+    ],
+    'darwin-aarch64'
+  );
+  const darwinX64Tar = findAsset(
+    assets,
+    [
+      /_(x64|x86_64|amd64)\.app\.tar\.gz$/,
+      /(?:^|[_-])(x64|x86_64|amd64)(?:-apple-darwin)?\.app\.tar\.gz$/,
+      (name) => /\.app\.tar\.gz$/.test(name) && /(?:^|[_-])(x64|x86_64|amd64)(?:[_-]|\.|$)/.test(name),
+    ],
+    'darwin-x86_64'
+  );
   const windowsMsi = findAsset(assets, /_x64_en-US\.msi$/, 'windows-x86_64-msi');
   const windowsNsis = findAsset(assets, /_x64-setup\.exe$/, 'windows-x86_64-nsis');
   const linuxX64AppImage = findAsset(assets, /_amd64\.AppImage$/, 'linux-x86_64-appimage');

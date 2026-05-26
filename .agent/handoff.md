@@ -1,21 +1,21 @@
-# 最新接续状态 (2026-05-26 18:20)
+# 最新接续状态 (2026-05-26 22:17)
 
 ## 核心进展
-- 已完成 Codex Antigravity 插件端无感切号并发布 `v0.20.47`：修复非 Windows 平台编译失败（缺少 `RuntimeTokens` 声明）以及特定平台编译警告的问题。
-- 已解决 `src-tauri/src/modules/codex_wakeup_scheduler.rs` 合并冲突：合并保留精确 quota window 匹配、满额度无 reset_time 兜底去重、下一次运行时间兜底逻辑。
-- 已确认周额度排序仍在当前 HEAD：`src/pages/CodexAccountsPage.tsx` 使用 `getCodexQuotaWindows`、`getQuotaSortValue`、`getQuotaResetSortValue` 处理 `weekly` 与 `weekly_reset`。
+- 已修复 GitHub Actions `Rebuild merged latest.json` 因 `darwin-aarch64` 更新资产命名匹配过窄导致失败的问题，关键改动在 `scripts/release/build_merged_latest_json.cjs`，并新增 `scripts/release/build_merged_latest_json.test.cjs` 覆盖 macOS 新旧资产命名。
 
 ## 变更决策
-- Codex 桌面端热切已放弃继续改造；本轮只保留 Antigravity IDE + Codex 插件 Inspector 运行时无感切号，不依赖 Desktop app-server，不自动重启，不写入 `auth.json`。
-- 版本推进到 `0.20.47`；已同步 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`。
-- 发布已执行：`git push origin main` 与 `git push origin v0.20.47`（待执行）；后续需查 Actions 运行情况。
-- 项目规则核对：`.agent/rules/README.md` 与 `.cursorrules` 不存在；遵循当前 `AGENTS.md` 要求，Windows 中文规则读取使用 UTF-8，提交前已做静态验证。
+- Tauri v2 官方文档确认 updater 的 `latest.json` 需要 `platforms.<target>.url/signature`，macOS 更新资产为 `.app.tar.gz` 加 `.sig`；脚本继续生成合并版 `latest.json`，但不再只依赖 `_aarch64.app.tar.gz` / `_x64.app.tar.gz` 这种单一后缀。
+- `findAsset` 已支持多个匹配器，并在缺失资产时输出实际可用资产清单，后续 CI 再失败时能直接看到 Release 资产名。
+- macOS 匹配现在兼容旧命名和 target-qualified 命名：`_aarch64.app.tar.gz`、`_x64.app.tar.gz`、`aarch64-apple-darwin.app.tar.gz`、`x86_64-apple-darwin.app.tar.gz` 等。
+- 已用 `node --test scripts/release/build_merged_latest_json.test.cjs` 验证通过 2 个测试；额外冒烟验证生成 `latest.json` 平台数为 15，`darwin-aarch64` / `darwin-x86_64` URL 指向正确的 `.app.tar.gz` 资产。
 
 ## 待办事项 (Next Steps)
-- [ ] 确认 GitHub Actions / Release 部署是否完成，必要时查看 `v0.20.46` workflow 运行日志。
-- [ ] 如需分发给他人，使用 `v0.20.46` 产物；目标机器需安装 Antigravity IDE 并启用 Codex 插件，Cockpit 内需已有可切换 Codex 账号。
-- [ ] 若继续处理 Codex 唤醒/额度逻辑，优先复测 `codex_wakeup_scheduler.rs` 的 quota reset、full quota fallback、weekly window 排序/触发行为。
+- [ ] 视需要提交当前修复文件：`scripts/release/build_merged_latest_json.cjs`、`scripts/release/build_merged_latest_json.test.cjs`、`.agent/handoff.md`。
+- [ ] 重新触发或重新推送新的 Release tag，验证 `Rebuild merged latest.json` 不再报 `Missing required updater asset for darwin-aarch64`。
+- [ ] 若 CI 仍失败，优先查看新错误里打印的 `Available assets`，按真实资产名继续收窄匹配规则。
 
 ## 关键上下文
 - 目录: `C:\Users\Administrator\Desktop\超级文件\AI-IDE\AI\cockpit-tools`
-- 主要文件: `src-tauri/src/modules/codex_runtime_bridge.rs`, `src-tauri/src/modules/codex_wakeup_scheduler.rs`, `src/pages/CodexAccountsPage.tsx`
+- 主要文件: `scripts/release/build_merged_latest_json.cjs`
+- 主要文件: `scripts/release/build_merged_latest_json.test.cjs`
+- 主要文件: `.github/workflows/release.yml`
