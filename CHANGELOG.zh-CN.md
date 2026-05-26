@@ -8,6 +8,10 @@
 
 ---
 
+## [0.20.51] - 2026-05-26
+### 修复
+- **macOS 发布资产冲突**：移除额外的 universal macOS 发布矩阵，避免与 Apple Silicon / Intel 构建向同一 Release 上传同名资产。
+
 ## [0.20.50] - 2026-05-26
 ### 修复
 - **Release Runner 初始化**：移除发布流程对 `dtolnay/rust-toolchain` action 归档下载的依赖，改用 runner 自带 `rustup` 安装 Rust stable 与目标平台。

@@ -19,9 +19,6 @@ jobs:
           # macOS Intel
           - platform: "macos-latest"
             args: "--target x86_64-apple-darwin"
-          # macOS Universal (同时支持 Intel 和 Apple Silicon)
-          - platform: "macos-latest"
-            args: "--target universal-apple-darwin"
           # Linux x86_64
           - platform: "ubuntu-22.04"
             args: ""

@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.51] - 2026-05-26
+### Fixed
+- **macOS release asset collision**: Removed the extra universal macOS release matrix entry to avoid uploading duplicate asset names alongside the Apple Silicon and Intel builds.
+
 ## [0.20.50] - 2026-05-26
 ### Fixed
 - **Release runner setup**: Removed the Release workflow dependency on downloading the `dtolnay/rust-toolchain` action archive and now uses the runner-provided `rustup` to install Rust stable and target triples.
