@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.52] - 2026-05-27
+### Fixed
+- **Release workflow asset convergence**: Uploads all platform artifacts into one draft release before rebuilding merged `latest.json`, so Windows updater assets are present alongside macOS and Linux assets.
+- **Homebrew cask release follow-up**: Updates the cask automation to use the published x64 DMG instead of a missing universal DMG.
+- **Codex Windows launch preference**: Tries a configured local Codex executable before the Store entry, reports invalid configured paths directly, and falls back to the Store entry when no local path is configured.
+
 ## [0.20.51] - 2026-05-26
 ### Fixed
 - **macOS release asset collision**: Removed the extra universal macOS release matrix entry to avoid uploading duplicate asset names alongside the Apple Silicon and Intel builds.

@@ -8,6 +8,12 @@
 
 ---
 
+## [0.20.52] - 2026-05-27
+### 修复
+- **发布流程资产归集**：所有平台构建现在先上传到同一个 draft release，再重建合并版 `latest.json`，确保 Windows updater 资产与 macOS、Linux 资产同处一个 Release。
+- **Homebrew Cask 后处理**：cask 自动更新改用实际发布的 x64 DMG，不再下载不存在的 universal DMG。
+- **Codex Windows 启动优先级**：优先尝试用户配置的本地 Codex 可执行文件，配置路径无效时明确报错，未配置本地路径时继续回退到 Store 入口。
+
 ## [0.20.51] - 2026-05-26
 ### 修复
 - **macOS 发布资产冲突**：移除额外的 universal macOS 发布矩阵，避免与 Apple Silicon / Intel 构建向同一 Release 上传同名资产。
