@@ -142,7 +142,28 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     return account;
   },
 
-  switchAccount: async (accountId: string) => get().hotSwitchAccount(accountId),
+  switchAccount: async (accountId: string) => {
+    codexCurrentAccountEpoch += 1;
+    const account = await codexService.switchCodexAccount(accountId);
+    codexCurrentAccountEpoch += 1;
+    set((state) => {
+      const nextAccounts = state.accounts.map((item) =>
+        item.id === account.id ? { ...item, ...account } : item,
+      );
+      persistCodexAccountsCache(nextAccounts);
+      persistCodexCurrentAccountCache(account);
+      return { accounts: nextAccounts, currentAccount: account };
+    });
+    await get().fetchAccounts();
+    set({ currentAccount: account });
+    persistCodexCurrentAccountCache(account);
+    await emitCurrentAccountChanged({
+      platformId: 'codex',
+      accountId: account.id,
+      reason: 'switch',
+    });
+    return account;
+  },
   
   deleteAccount: async (accountId: string) => {
     const previousCurrentAccountId = get().currentAccount?.id ?? null;

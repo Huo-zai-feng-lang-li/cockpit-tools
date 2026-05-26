@@ -54,6 +54,7 @@ import {
 } from '../types/codex';
 import { buildCodexAccountPresentation } from '../presentation/platformAccountPresentation';
 
+import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { confirm as confirmDialog, open as openFileDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -92,6 +93,12 @@ const CODEX_TOKEN_BATCH_EXAMPLE = `[
     "last_used": 1730000000
   }
 ]`;
+
+interface CodexSwitchTargetConfig {
+  codex_switch_targets_enabled: boolean;
+  codex_launch_on_switch: boolean;
+  antigravity_dual_switch_no_restart_enabled: boolean;
+}
 const CODEX_USAGE_URL = 'https://platform.openai.com/usage';
 const CODEX_OVERVIEW_LAYOUT_MODE_KEY = 'agtools.codex.accounts.overview_layout_mode';
 
@@ -307,6 +314,7 @@ export function CodexAccountsPage() {
     hydrateAccountProfilesIfNeeded,
     updateAccountName,
     updateApiKeyCredentials,
+    switchAccount,
   } = store;
 
   // ─── Codex-specific: OAuth via Tauri events ──────────────────────────
@@ -680,23 +688,52 @@ export function CodexAccountsPage() {
     setMessage(null);
     setSwitching(accountId);
     try {
-      const account = await hotSwitchAccount(accountId);
+      const config = await invoke<CodexSwitchTargetConfig>('get_general_config');
+      if (!config.codex_switch_targets_enabled) {
+        setMessage({
+          text: t('codex.switchTargets.disabled', '已关闭点击切号同步'),
+          tone: 'error',
+        });
+        return;
+      }
+
+      const usePlugin = config.antigravity_dual_switch_no_restart_enabled;
+      const useDesktop = config.codex_launch_on_switch;
+      if (!usePlugin && !useDesktop) {
+        setMessage({
+          text: t('codex.switchTargets.empty', '未选择切号目标'),
+          tone: 'error',
+        });
+        return;
+      }
+
+      const account = usePlugin
+        ? await hotSwitchAccount(accountId)
+        : await switchAccount(accountId);
+
+      if (usePlugin && useDesktop) {
+        await switchAccount(accountId);
+      }
+
       setMessage({
         text: t(
-          'codex.hotSwitch.success',
-          '无感热切成功: {{email}}',
+          usePlugin
+            ? 'codex.hotSwitch.success'
+            : 'codex.desktopSwitch.success',
+          usePlugin ? '无感热切成功: {{email}}' : '桌面端换号成功: {{email}}',
         ).replace('{{email}}', maskAccountText(account.email)),
       });
     } catch (e) {
       setMessage({
         text: t(
           'codex.hotSwitch.failed',
-          '无感热切失败，不会自动重启或写入 auth.json: {{error}}',
+          '切号失败: {{error}}',
         ).replace('{{error}}', String(e)),
         tone: 'error',
       });
+    } finally {
+      setSwitching(null);
     }
-    setSwitching(null);
   };
 
   const handleImportFromLocal = async () => {

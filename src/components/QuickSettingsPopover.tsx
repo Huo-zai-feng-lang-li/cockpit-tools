@@ -53,6 +53,7 @@ interface GeneralConfig {
   ghcp_launch_on_switch: boolean;
   openclaw_auth_overwrite_on_switch: boolean;
   codex_launch_on_switch: boolean;
+  codex_switch_targets_enabled: boolean;
   antigravity_dual_switch_no_restart_enabled: boolean;
   auto_switch_enabled: boolean;
   auto_switch_threshold: number;
@@ -357,6 +358,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           openclawAuthOverwriteOnSwitch:
             merged.openclaw_auth_overwrite_on_switch,
           codexLaunchOnSwitch: merged.codex_launch_on_switch,
+          codexSwitchTargetsEnabled: merged.codex_switch_targets_enabled,
           antigravityDualSwitchNoRestartEnabled:
             merged.antigravity_dual_switch_no_restart_enabled,
           autoSwitchEnabled: merged.auto_switch_enabled,
@@ -1396,7 +1398,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
               </div>
             )}
 
-            {/* ─── Codex: opencode sync ─── */}
+            {/* ─── Codex: switch targets ─── */}
             {type === "codex" && (
               <div className="qs-section">
                 <div className="qs-row">
@@ -1404,8 +1406,64 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     <Zap size={15} />
                     <span>
                       {t(
-                        "settings.general.codexLaunchOnSwitch",
-                        "切换 Codex 时自动启动 Codex App",
+                        "settings.general.codexSwitchTargetsEnabled",
+                        "点击切号时同步运行端",
+                      )}
+                    </span>
+                  </div>
+                  <div className="qs-row-control">
+                    <label className="qs-switch">
+                      <input
+                        type="checkbox"
+                        checked={config.codex_switch_targets_enabled}
+                        onChange={(e) =>
+                          saveConfig({
+                            codex_switch_targets_enabled: e.target.checked,
+                          })
+                        }
+                      />
+                      <span className="qs-switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="qs-row">
+                  <div className="qs-row-label">
+                    <Zap size={15} />
+                    <span>
+                      {t(
+                        "settings.general.antigravityCodexPluginHotSwitch",
+                        "反重力 IDE 插件无感换号",
+                      )}
+                    </span>
+                  </div>
+                  <div className="qs-row-control">
+                    <label className="qs-switch">
+                      <input
+                        type="checkbox"
+                        checked={
+                          config.antigravity_dual_switch_no_restart_enabled
+                        }
+                        disabled={!config.codex_switch_targets_enabled}
+                        onChange={(e) =>
+                          saveConfig({
+                            antigravity_dual_switch_no_restart_enabled:
+                              e.target.checked,
+                          })
+                        }
+                      />
+                      <span className="qs-switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="qs-row">
+                  <div className="qs-row-label">
+                    <Zap size={15} />
+                    <span>
+                      {t(
+                        "settings.general.codexDesktopRestartSwitch",
+                        "桌面端 Codex App 重启换号",
                       )}
                     </span>
                   </div>
@@ -1414,93 +1472,10 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <input
                         type="checkbox"
                         checked={config.codex_launch_on_switch}
+                        disabled={!config.codex_switch_targets_enabled}
                         onChange={(e) =>
                           saveConfig({
                             codex_launch_on_switch: e.target.checked,
-                          })
-                        }
-                      />
-                      <span className="qs-switch-slider"></span>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="qs-row">
-                  <div className="qs-row-label">
-                    <Zap size={15} />
-                    <span>
-                      {t(
-                        "settings.general.openclawAuthOverwrite",
-                        "切换 Codex 时覆盖 OpenClaw 登录信息",
-                      )}
-                    </span>
-                  </div>
-                  <div className="qs-row-control">
-                    <label className="qs-switch">
-                      <input
-                        type="checkbox"
-                        checked={config.openclaw_auth_overwrite_on_switch}
-                        onChange={(e) =>
-                          saveConfig({
-                            openclaw_auth_overwrite_on_switch: e.target.checked,
-                          })
-                        }
-                      />
-                      <span className="qs-switch-slider"></span>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="qs-row">
-                  <div className="qs-row-label">
-                    <Zap size={15} />
-                    <span>
-                      {t(
-                        "settings.general.opencodeAuthOverwrite",
-                        "切换 Codex 时覆盖 OpenCode 登录信息",
-                      )}
-                    </span>
-                  </div>
-                  <div className="qs-row-control">
-                    <label className="qs-switch">
-                      <input
-                        type="checkbox"
-                        checked={config.opencode_auth_overwrite_on_switch}
-                        onChange={(e) =>
-                          saveConfig(
-                            e.target.checked
-                              ? { opencode_auth_overwrite_on_switch: true }
-                              : {
-                                  opencode_auth_overwrite_on_switch: false,
-                                  opencode_sync_on_switch: false,
-                                },
-                          )
-                        }
-                      />
-                      <span className="qs-switch-slider"></span>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="qs-row">
-                  <div className="qs-row-label">
-                    <Zap size={15} />
-                    <span>
-                      {t(
-                        "settings.general.opencodeRestart",
-                        "切换时自动重启 OpenCode",
-                      )}
-                    </span>
-                  </div>
-                  <div className="qs-row-control">
-                    <label className="qs-switch">
-                      <input
-                        type="checkbox"
-                        checked={config.opencode_sync_on_switch}
-                        disabled={!config.opencode_auth_overwrite_on_switch}
-                        onChange={(e) =>
-                          saveConfig({
-                            opencode_sync_on_switch: e.target.checked,
                           })
                         }
                       />

@@ -104,6 +104,7 @@ interface GeneralConfig {
   opencode_auth_overwrite_on_switch: boolean;
   openclaw_auth_overwrite_on_switch: boolean;
   codex_launch_on_switch: boolean;
+  codex_switch_targets_enabled: boolean;
   antigravity_dual_switch_no_restart_enabled: boolean;
   auto_switch_enabled: boolean;
   auto_switch_threshold: number;
@@ -322,6 +323,8 @@ export function SettingsPage() {
   const [openclawAuthOverwriteOnSwitch, setOpenclawAuthOverwriteOnSwitch] =
     useState(false);
   const [codexLaunchOnSwitch, setCodexLaunchOnSwitch] = useState(true);
+  const [codexSwitchTargetsEnabled, setCodexSwitchTargetsEnabled] =
+    useState(true);
   const [
     antigravityDualSwitchNoRestartEnabled,
     setAntigravityDualSwitchNoRestartEnabled,
@@ -713,6 +716,7 @@ export function SettingsPage() {
           opencodeAuthOverwriteOnSwitch,
           openclawAuthOverwriteOnSwitch,
           codexLaunchOnSwitch,
+          codexSwitchTargetsEnabled,
           antigravityDualSwitchNoRestartEnabled,
           autoSwitchEnabled,
           autoSwitchThreshold: Number.isNaN(parsedAutoSwitchThreshold)
@@ -835,6 +839,7 @@ export function SettingsPage() {
     opencodeAuthOverwriteOnSwitch,
     openclawAuthOverwriteOnSwitch,
     codexLaunchOnSwitch,
+    codexSwitchTargetsEnabled,
     antigravityDualSwitchNoRestartEnabled,
     autoSwitchEnabled,
     autoSwitchThreshold,
@@ -1151,6 +1156,7 @@ export function SettingsPage() {
         config.openclaw_auth_overwrite_on_switch ?? false,
       );
       setCodexLaunchOnSwitch(config.codex_launch_on_switch ?? true);
+      setCodexSwitchTargetsEnabled(config.codex_switch_targets_enabled ?? true);
       setAntigravityDualSwitchNoRestartEnabled(
         config.antigravity_dual_switch_no_restart_enabled ?? false,
       );

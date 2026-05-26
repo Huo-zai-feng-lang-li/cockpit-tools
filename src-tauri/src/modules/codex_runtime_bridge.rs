@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_json::Value;
 #[cfg(target_os = "windows")]
+use std::sync::Mutex;
+#[cfg(target_os = "windows")]
 use std::time::Duration;
 #[cfg(target_os = "windows")]
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
@@ -15,7 +17,9 @@ use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, Web
 #[cfg(target_os = "windows")]
 const INSPECTOR_HTTP_TIMEOUT_SECS: u64 = 2;
 #[cfg(target_os = "windows")]
-const INSPECTOR_REQUEST_TIMEOUT_SECS: u64 = 20;
+const INSPECTOR_REQUEST_TIMEOUT_SECS: u64 = 8;
+#[cfg(target_os = "windows")]
+static LAST_INSPECTOR_ENDPOINT: Mutex<Option<InspectorEndpoint>> = Mutex::new(None);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexHotSwitchRuntimeResult {
@@ -87,6 +91,16 @@ async fn hot_switch_via_antigravity_inspector(
     account: &CodexAccount,
     tokens: &RuntimeTokens,
 ) -> Result<CodexHotSwitchRuntimeResult, String> {
+    if let Some(endpoint) = cached_inspector_endpoint() {
+        match hot_switch_with_inspector_endpoint(&endpoint, account, tokens).await {
+            Ok(rate_limits) => return Ok(build_hot_switch_result(&endpoint, account, rate_limits)),
+            Err(err) => logger::log_info(&format!(
+                "[Codex HotSwitch] 缓存 Inspector 端点失效: pid={}, port={}, error={}",
+                endpoint.pid, endpoint.port, err
+            )),
+        }
+    }
+
     let endpoints = discover_antigravity_inspector_endpoints().await?;
     if endpoints.is_empty() {
         return Err("未发现 Antigravity 扩展宿主 Inspector 端口".to_string());
@@ -96,17 +110,8 @@ async fn hot_switch_via_antigravity_inspector(
     for endpoint in endpoints {
         match hot_switch_with_inspector_endpoint(&endpoint, account, tokens).await {
             Ok(rate_limits) => {
-                logger::log_info(&format!(
-                    "[Codex HotSwitch] Antigravity 插件运行时热切完成: pid={}, port={}, email={}",
-                    endpoint.pid, endpoint.port, account.email
-                ));
-                return Ok(CodexHotSwitchRuntimeResult {
-                    runtime: format!(
-                        "antigravity-codex-extension-inspector:pid={},port={}",
-                        endpoint.pid, endpoint.port
-                    ),
-                    rate_limits,
-                });
+                remember_inspector_endpoint(&endpoint);
+                return Ok(build_hot_switch_result(&endpoint, account, rate_limits));
             }
             Err(err) => errors.push(format!(
                 "pid={},port={}: {}",
@@ -119,6 +124,37 @@ async fn hot_switch_via_antigravity_inspector(
         "Antigravity Inspector 均未完成热切: {}",
         errors.join(" | ")
     ))
+}
+
+#[cfg(target_os = "windows")]
+fn cached_inspector_endpoint() -> Option<InspectorEndpoint> {
+    LAST_INSPECTOR_ENDPOINT.lock().ok()?.clone()
+}
+
+#[cfg(target_os = "windows")]
+fn remember_inspector_endpoint(endpoint: &InspectorEndpoint) {
+    if let Ok(mut cached) = LAST_INSPECTOR_ENDPOINT.lock() {
+        *cached = Some(endpoint.clone());
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn build_hot_switch_result(
+    endpoint: &InspectorEndpoint,
+    account: &CodexAccount,
+    rate_limits: Option<Value>,
+) -> CodexHotSwitchRuntimeResult {
+    logger::log_info(&format!(
+        "[Codex HotSwitch] Antigravity 插件运行时热切完成: pid={}, port={}, email={}",
+        endpoint.pid, endpoint.port, account.email
+    ));
+    CodexHotSwitchRuntimeResult {
+        runtime: format!(
+            "antigravity-codex-extension-inspector:pid={},port={}",
+            endpoint.pid, endpoint.port
+        ),
+        rate_limits,
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -566,7 +602,7 @@ const HOT_SWITCH_FUNCTION: &str = r#"async function(payload) {
   const disposable = this.registerProvider(namespace, provider);
   this.__cockpitHotSwitchProvider = disposable;
 
-  const request = (method, params, timeoutMs = 10000) => new Promise((resolve, reject) => {
+  const request = (method, params, timeoutMs = 4000) => new Promise((resolve, reject) => {
     const id = `${Date.now()}-${Math.random()}`;
     const timer = setTimeout(() => {
       pending.delete(id);
@@ -603,11 +639,11 @@ const HOT_SWITCH_FUNCTION: &str = r#"async function(payload) {
         }
         return;
       }
-      if (Date.now() - startedAt > 8000) {
+      if (Date.now() - startedAt > 1500) {
         resolve(null);
         return;
       }
-      setTimeout(tick, 100);
+      setTimeout(tick, 50);
     };
     tick();
   });
