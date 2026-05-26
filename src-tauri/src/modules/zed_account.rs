@@ -13,6 +13,7 @@ use crate::modules::{account, logger};
 
 const ACCOUNTS_INDEX_FILE: &str = "zed_accounts.json";
 const ACCOUNTS_DIR: &str = "zed_accounts";
+#[cfg(target_os = "macos")]
 const ZED_SERVER_URL: &str = "https://zed.dev";
 const ZED_CLOUD_BASE_URL: &str = "https://cloud.zed.dev";
 const ZED_QUOTA_ALERT_COOLDOWN_SECONDS: i64 = 10 * 60;

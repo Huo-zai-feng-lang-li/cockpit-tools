@@ -1,18 +1,21 @@
-# 最新接续状态 (2026-05-26 00:09)
+# 最新接续状态 (2026-05-26 16:15)
 
 ## 核心进展
-- 已修复 Codex 账号总览“按周配额”升降序排序：`src/pages/CodexAccountsPage.tsx` 现在通过 `getCodexQuotaWindows()` 读取真实 7d 配额窗口；`v0.20.45` 已在干净 release worktree 提交、打 tag、推送，用户已安装验证可用。
+- 已完成 Codex Antigravity 插件端无感切号并发布 `v0.20.46`：`main`/`origin/main`/`v0.20.46` 指向 `cec1ce2`，上一提交 `1a689b6` 保留 `src-tauri/src/modules/codex_runtime_bridge.rs`、`src-tauri/src/commands/codex.rs`、`src/stores/useCodexAccountStore.ts`、`src/pages/CodexAccountsPage.tsx` 的热切链路。
+- 已解决 `src-tauri/src/modules/codex_wakeup_scheduler.rs` 合并冲突：合并保留精确 quota window 匹配、满额度无 reset_time 兜底去重、下一次运行时间兜底逻辑。
+- 已确认周额度排序仍在当前 HEAD：`src/pages/CodexAccountsPage.tsx` 使用 `getCodexQuotaWindows`、`getQuotaSortValue`、`getQuotaResetSortValue` 处理 `weekly` 与 `weekly_reset`。
 
 ## 变更决策
-- 当前账号保持全局置顶，不受排序类型和升降序影响；其余账号再按所选字段排序，满足“当前账号固定锚点 + 周配额降序优先展示可用号”的使用心智。
-- 发布避开主工作区历史脏改，使用 `C:\Users\Administrator\Desktop\超级文件\AI-IDE\AI\cockpit-tools-release-0.20.45` 干净 worktree 基于 `origin/main` 完成；提交为 `945a2b9 fix(codex): sort accounts by quota windows v0.20.45`，tag 为 `v0.20.45`。
-- CI 发布规则已核对：`.github/workflows/release.yml` 由 `v*` tag 触发，并校验 tag 必须等于 `package.json` 版本；本次同步了 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 和中英文 changelog。
+- Codex 桌面端热切已放弃继续改造；本轮只保留 Antigravity IDE + Codex 插件 Inspector 运行时无感切号，不依赖 Desktop app-server，不自动重启，不写入 `auth.json`。
+- 版本从合并态 `0.20.41` 推进到 `0.20.46`，因为远端已有 `v0.20.45`；已执行 `npm version 0.20.46 --no-git-tag-version` 与 `npm run sync-version` 同步 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`。
+- 发布已执行：`git push origin main` 与 `git push origin v0.20.46` 成功；`gh run list` 查询 GitHub Actions 时本地命令超时，后续如需确认部署状态需继续查 Actions。
+- 项目规则核对：`.agent/rules/README.md` 与 `.cursorrules` 不存在；遵循当前 `AGENTS.md` 要求，Windows 中文规则读取使用 UTF-8，提交前已做静态验证。
 
 ## 待办事项 (Next Steps)
-- [ ] 如继续在主工作区开发，先处理当前历史脏状态：`.agent/handoff.md`、`src/pages/CodexAccountsPage.tsx`、多个 `src-tauri/src/modules/*` 与 `src-tauri/src/commands/account.rs` 仍为未提交状态；不要误混入后续发布。
-- [ ] 可选清理临时发布 worktree：`C:\Users\Administrator\Desktop\超级文件\AI-IDE\AI\cockpit-tools-release-0.20.45`，确认不再需要后再移除。
-- [ ] 若需要把发布修复同步回当前主工作区，应从 `v0.20.45`/提交 `945a2b9` 对账迁移，保留“当前账号全局置顶”的排序规则。
+- [ ] 确认 GitHub Actions / Release 部署是否完成，必要时查看 `v0.20.46` workflow 运行日志。
+- [ ] 如需分发给他人，使用 `v0.20.46` 产物；目标机器需安装 Antigravity IDE 并启用 Codex 插件，Cockpit 内需已有可切换 Codex 账号。
+- [ ] 若继续处理 Codex 唤醒/额度逻辑，优先复测 `codex_wakeup_scheduler.rs` 的 quota reset、full quota fallback、weekly window 排序/触发行为。
 
 ## 关键上下文
 - 目录: `C:\Users\Administrator\Desktop\超级文件\AI-IDE\AI\cockpit-tools`
-- 主要文件: `src/pages/CodexAccountsPage.tsx`, `.github/workflows/release.yml`, `.agent/handoff.md`
+- 主要文件: `src-tauri/src/modules/codex_runtime_bridge.rs`, `src-tauri/src/modules/codex_wakeup_scheduler.rs`, `src/pages/CodexAccountsPage.tsx`

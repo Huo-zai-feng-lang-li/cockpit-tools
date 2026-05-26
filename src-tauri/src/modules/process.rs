@@ -1,5 +1,7 @@
 use crate::modules::config;
-use std::collections::{HashMap, HashSet};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::thread;
@@ -977,9 +979,6 @@ pub fn append_managed_proxy_env_to_open_args(cmd: &mut Command) {
         cmd.arg("--env").arg(format!("{}={}", key, value));
     }
 }
-
-#[cfg(not(target_os = "macos"))]
-pub fn append_managed_proxy_env_to_open_args(_cmd: &mut Command) {}
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn spawn_detached_unix(cmd: &mut Command) -> Result<Child, String> {
@@ -3280,6 +3279,7 @@ fn is_antigravity_main_process(
     }
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn collect_running_process_exe_by_pid() -> HashMap<u32, String> {
     let mut map = HashMap::new();
 
@@ -3336,6 +3336,7 @@ fn collect_running_process_exe_by_pid() -> HashMap<u32, String> {
     map
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn filter_entries_by_expected_launch_path(
     app_label: &str,
     entries: Vec<(u32, Option<String>)>,

@@ -616,6 +616,7 @@ fn collect_path_dirs() -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
+#[cfg(not(target_os = "windows"))]
 fn append_home_cli_dirs(dirs: &mut Vec<PathBuf>) {
     let Some(home) = std::env::var_os("HOME") else {
         return;

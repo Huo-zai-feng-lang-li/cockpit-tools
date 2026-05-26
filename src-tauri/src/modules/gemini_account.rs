@@ -11,6 +11,7 @@ use std::sync::Mutex;
 
 const ACCOUNTS_INDEX_FILE: &str = "gemini_accounts.json";
 const ACCOUNTS_DIR: &str = "gemini_accounts";
+#[cfg(target_os = "macos")]
 const GEMINI_QUOTA_ALERT_COOLDOWN_SECONDS: i64 = 10 * 60;
 
 const GEMINI_OAUTH_FILE: &str = "oauth_creds.json";
@@ -18,7 +19,9 @@ const GEMINI_GOOGLE_ACCOUNTS_FILE: &str = "google_accounts.json";
 const GEMINI_SETTINGS_FILE: &str = "settings.json";
 const GEMINI_FILE_KEYCHAIN_FILE: &str = "gemini-credentials.json";
 const GEMINI_HOME_DIR: &str = ".gemini";
+#[cfg(target_os = "macos")]
 const GEMINI_KEYCHAIN_SERVICE: &str = "gemini-cli-oauth";
+#[cfg(target_os = "macos")]
 const GEMINI_KEYCHAIN_ACCOUNT: &str = "main-account";
 
 const GOOGLE_TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
@@ -43,12 +46,14 @@ struct LocalOauthCreds {
     expiry_date: Option<Value>,
 }
 
+#[cfg(target_os = "macos")]
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LocalKeychainOauthCreds {
     token: Option<LocalKeychainToken>,
 }
 
+#[cfg(target_os = "macos")]
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LocalKeychainToken {
@@ -727,11 +732,6 @@ fn is_macos_default_keychain_available() -> bool {
 
     let normalized = raw.trim_matches('"');
     !normalized.trim().is_empty() && Path::new(normalized).exists()
-}
-
-#[cfg(not(target_os = "macos"))]
-fn is_macos_default_keychain_available() -> bool {
-    false
 }
 
 #[cfg(target_os = "macos")]
@@ -1637,6 +1637,7 @@ pub fn inject_to_gemini(account_id: &str) -> Result<(), String> {
     inject_to_gemini_home(account_id, None)
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) fn extract_account_model_remaining(account: &GeminiAccount) -> Vec<(String, i32)> {
     let mut model_remaining: HashMap<String, i32> = HashMap::new();
 
@@ -1696,14 +1697,17 @@ pub(crate) fn resolve_current_account(accounts: &[GeminiAccount]) -> Option<Gemi
         .cloned()
 }
 
+#[cfg(target_os = "macos")]
 fn normalize_quota_alert_threshold(raw: i32) -> i32 {
     raw.clamp(0, 100)
 }
 
+#[cfg(target_os = "macos")]
 fn build_quota_alert_cooldown_key(account_id: &str, threshold: i32) -> String {
     format!("{}:{}", account_id, threshold)
 }
 
+#[cfg(target_os = "macos")]
 fn should_emit_quota_alert(cooldown_key: &str, now: i64) -> bool {
     let Ok(mut state) = GEMINI_QUOTA_ALERT_LAST_SENT.lock() else {
         return true;
@@ -1719,12 +1723,14 @@ fn should_emit_quota_alert(cooldown_key: &str, now: i64) -> bool {
     true
 }
 
+#[cfg(target_os = "macos")]
 fn clear_quota_alert_cooldown(account_id: &str, threshold: i32) {
     if let Ok(mut state) = GEMINI_QUOTA_ALERT_LAST_SENT.lock() {
         state.remove(&build_quota_alert_cooldown_key(account_id, threshold));
     }
 }
 
+#[cfg(target_os = "macos")]
 fn pick_quota_alert_recommendation(
     accounts: &[GeminiAccount],
     current_account_id: &str,
@@ -1758,6 +1764,7 @@ fn pick_quota_alert_recommendation(
     best.map(|(id, email, _)| (id, email))
 }
 
+#[cfg(target_os = "macos")]
 pub fn run_quota_alert_if_needed() -> Result<(), String> {
     let cfg = crate::modules::config::get_user_config();
     if !cfg.gemini_quota_alert_enabled {

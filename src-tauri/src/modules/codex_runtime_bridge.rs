@@ -4,9 +4,9 @@ use crate::modules::logger;
 #[cfg(target_os = "windows")]
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 #[cfg(target_os = "windows")]
 use serde_json::json;
+use serde_json::Value;
 #[cfg(target_os = "windows")]
 use std::time::Duration;
 #[cfg(target_os = "windows")]
@@ -42,22 +42,23 @@ pub async fn hot_switch_account(
     #[cfg(not(target_os = "windows"))]
     {
         let _ = account;
-        return Err("Codex 无感热切仅支持 Windows 上的 Antigravity 插件 Inspector".to_string());
+        Err("Codex 无感热切仅支持 Windows 上的 Antigravity 插件 Inspector".to_string())
     }
 
     #[cfg(target_os = "windows")]
-    let tokens = build_runtime_tokens(account)?;
+    {
+        let tokens = build_runtime_tokens(account)?;
 
-    #[cfg(target_os = "windows")]
-    match hot_switch_via_antigravity_inspector(account, &tokens).await {
-        Ok(result) => return Ok(result),
-        Err(err) => logger::log_warn(&format!(
-            "[Codex HotSwitch] Antigravity 插件 Inspector 热切不可用: {}",
-            err
-        )),
+        match hot_switch_via_antigravity_inspector(account, &tokens).await {
+            Ok(result) => return Ok(result),
+            Err(err) => logger::log_warn(&format!(
+                "[Codex HotSwitch] Antigravity 插件 Inspector 热切不可用: {}",
+                err
+            )),
+        }
+
+        Err("未发现可热切的 Antigravity Codex 插件 Inspector 运行时".to_string())
     }
-
-    Err("未发现可热切的 Antigravity Codex 插件 Inspector 运行时".to_string())
 }
 
 #[cfg(target_os = "windows")]
@@ -641,6 +642,7 @@ const HOT_SWITCH_FUNCTION: &str = r#"async function(payload) {
   };
 }"#;
 
+#[cfg(target_os = "windows")]
 fn build_runtime_tokens(account: &CodexAccount) -> Result<RuntimeTokens, String> {
     let access_token = account.tokens.access_token.trim();
     if access_token.is_empty() {
@@ -662,6 +664,7 @@ fn build_runtime_tokens(account: &CodexAccount) -> Result<RuntimeTokens, String>
     })
 }
 
+#[cfg(target_os = "windows")]
 fn normalize_plan_type(plan_type: Option<&str>) -> Option<String> {
     let normalized = plan_type?.trim().to_ascii_lowercase();
     if normalized.is_empty() {
@@ -685,6 +688,7 @@ fn normalize_plan_type(plan_type: Option<&str>) -> Option<String> {
     Some(mapped.to_string())
 }
 
+#[cfg(target_os = "windows")]
 fn verify_runtime_account(value: &Value, target: &CodexAccount) -> Result<(), String> {
     let account = value
         .get("account")

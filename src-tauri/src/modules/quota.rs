@@ -923,7 +923,7 @@ fn build_quota_data_from_response(
             .filter(|value| !value.is_empty())
             .map(str::to_string);
         if let Some(quota_info) = info.quota_info {
-            let mut percentage = quota_info
+            let percentage = quota_info
                 .remaining_fraction
                 .map(|f| (f * 100.0) as i32)
                 .unwrap_or(0);
