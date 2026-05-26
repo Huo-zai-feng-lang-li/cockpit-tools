@@ -12,7 +12,7 @@ function writeAsset(dir, name) {
   fs.writeFileSync(path.join(dir, `${name}.sig`), `signature:${name}`);
 }
 
-function createFixture(macAssets) {
+function createFixture(macAssets, options = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'latest-json-'));
   const assetsDir = path.join(dir, 'assets');
   const notesFile = path.join(dir, 'release-notes.md');
@@ -20,9 +20,8 @@ function createFixture(macAssets) {
   fs.mkdirSync(assetsDir);
   fs.writeFileSync(notesFile, 'Release notes');
 
-  [
+  const assets = [
     ...macAssets,
-    'Cockpit Tools_0.20.51_x64_en-US.msi',
     'Cockpit Tools_0.20.51_x64-setup.exe',
     'cockpit-tools_0.20.51_amd64.AppImage',
     'cockpit-tools_0.20.51_aarch64.AppImage',
@@ -30,7 +29,13 @@ function createFixture(macAssets) {
     'cockpit-tools_0.20.51_arm64.deb',
     'cockpit-tools-0.20.51-1.x86_64.rpm',
     'cockpit-tools-0.20.51-1.aarch64.rpm',
-  ].forEach((name) => writeAsset(assetsDir, name));
+  ];
+
+  if (options.includeMsi !== false) {
+    assets.push('Cockpit Tools_0.20.51_x64_en-US.msi');
+  }
+
+  assets.forEach((name) => writeAsset(assetsDir, name));
 
   return { dir, assetsDir, notesFile, outputFile };
 }
@@ -79,4 +84,21 @@ test('keeps compatibility with previous macOS updater names', () => {
 
   assert.match(latest.platforms['darwin-aarch64'].url, /_aarch64\.app\.tar\.gz$/);
   assert.match(latest.platforms['darwin-x86_64'].url, /_x64\.app\.tar\.gz$/);
+});
+
+test('builds latest.json when Windows MSI is absent', () => {
+  const latest = runFixture(
+    createFixture(
+      [
+        'Cockpit Tools_0.20.51_aarch64-apple-darwin.app.tar.gz',
+        'Cockpit Tools_0.20.51_x86_64-apple-darwin.app.tar.gz',
+      ],
+      { includeMsi: false }
+    )
+  );
+
+  assert.equal(latest.platforms['windows-x86_64-msi'], undefined);
+  assert.match(latest.platforms['windows-x86_64'].url, /_x64-setup\.exe$/);
+  assert.match(latest.platforms['windows-x86_64-nsis'].url, /_x64-setup\.exe$/);
+  assert.equal(Object.keys(latest.platforms).length, 14);
 });

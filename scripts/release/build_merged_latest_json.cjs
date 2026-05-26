@@ -69,6 +69,11 @@ function findAsset(assets, patterns, label) {
   return hit;
 }
 
+function findOptionalAsset(assets, patterns) {
+  const matchers = Array.isArray(patterns) ? patterns : [patterns];
+  return assets.find((name) => matchers.some((pattern) => matchesPattern(name, pattern))) || null;
+}
+
 function buildPlatformEntry(assetName, signatures, repo, version) {
   const signature = signatures.get(assetName);
   if (!signature) {
@@ -133,7 +138,7 @@ function main() {
     ],
     'darwin-x86_64'
   );
-  const windowsMsi = findAsset(assets, /_x64_en-US\.msi$/, 'windows-x86_64-msi');
+  const windowsMsi = findOptionalAsset(assets, /_x64_en-US\.msi$/);
   const windowsNsis = findAsset(assets, /_x64-setup\.exe$/, 'windows-x86_64-nsis');
   const linuxX64AppImage = findAsset(assets, /_amd64\.AppImage$/, 'linux-x86_64-appimage');
   const linuxArmAppImage = findAsset(assets, /_aarch64\.AppImage$/, 'linux-aarch64-appimage');
@@ -144,8 +149,8 @@ function main() {
 
   const darwinAarch64Entry = buildPlatformEntry(darwinAarch64Tar, signatures, repo, version);
   const darwinX64Entry = buildPlatformEntry(darwinX64Tar, signatures, repo, version);
-  const windowsMsiEntry = buildPlatformEntry(windowsMsi, signatures, repo, version);
   const windowsNsisEntry = buildPlatformEntry(windowsNsis, signatures, repo, version);
+  const windowsMsiEntry = windowsMsi ? buildPlatformEntry(windowsMsi, signatures, repo, version) : null;
   const linuxX64AppImageEntry = buildPlatformEntry(linuxX64AppImage, signatures, repo, version);
   const linuxArmAppImageEntry = buildPlatformEntry(linuxArmAppImage, signatures, repo, version);
   const linuxX64DebEntry = buildPlatformEntry(linuxX64Deb, signatures, repo, version);
@@ -164,7 +169,6 @@ function main() {
       'darwin-x86_64-app': cloneEntry(darwinX64Entry),
       // Keep Windows fallback aligned to NSIS so updater fallback does not switch installer type.
       'windows-x86_64': windowsNsisEntry,
-      'windows-x86_64-msi': cloneEntry(windowsMsiEntry),
       'windows-x86_64-nsis': windowsNsisEntry,
       'linux-x86_64': linuxX64AppImageEntry,
       'linux-x86_64-appimage': cloneEntry(linuxX64AppImageEntry),
@@ -176,6 +180,10 @@ function main() {
       'linux-aarch64-rpm': linuxArmRpmEntry,
     },
   };
+
+  if (windowsMsiEntry) {
+    latest.platforms['windows-x86_64-msi'] = windowsMsiEntry;
+  }
 
   fs.writeFileSync(output, `${JSON.stringify(latest, null, 2)}\n`);
   console.log(`Merged latest.json generated at ${output}`);
