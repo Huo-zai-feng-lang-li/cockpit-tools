@@ -11,7 +11,8 @@ static RUNNING_TASKS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 const FULL_QUOTA_WAKEUP_THRESHOLD: i32 = 95;
 const PRIMARY_WINDOW_FALLBACK_MINUTES: i64 = 5 * 60;
 const SECONDARY_WINDOW_FALLBACK_MINUTES: i64 = 7 * 24 * 60;
-const FRESH_WINDOW_GRACE_SECONDS: i64 = 60;
+const FRESH_WINDOW_GRACE_SECONDS: i64 = 12 * 60 * 60;
+const FULL_QUOTA_WITHOUT_RESET_COOLDOWN_SECONDS: i64 = 6 * 24 * 60 * 60;
 
 struct QuotaResetCandidate {
     account_id: String,
@@ -66,15 +67,13 @@ fn fresh_quota_window_due_at(
 
     let window_seconds = window_minutes.unwrap_or(fallback_window_minutes).max(1) * 60;
     let remaining_seconds = reset_at.saturating_sub(now_ts);
-    let countdown_started = remaining_seconds + FRESH_WINDOW_GRACE_SECONDS < window_seconds;
-    let countdown_not_started = remaining_seconds > window_seconds + FRESH_WINDOW_GRACE_SECONDS;
-    if countdown_started || countdown_not_started {
+    if remaining_seconds + FRESH_WINDOW_GRACE_SECONDS < window_seconds {
         return None;
     }
 
     let cycle_started_at = reset_at.saturating_sub(window_seconds);
     let already_processed = last_run_at
-        .map(|value| value >= cycle_started_at)
+        .map(|value| value >= cycle_started_at.saturating_sub(FRESH_WINDOW_GRACE_SECONDS))
         .unwrap_or(false);
     if already_processed {
         return None;
@@ -102,6 +101,77 @@ fn quota_window_matches_filter(
         }
         _ => false,
     }
+}
+
+fn full_quota_without_reset_due_at(
+    percentage: i32,
+    reset_at: Option<i64>,
+    has_active_reset_countdown: bool,
+    last_run_at: Option<i64>,
+    now_ts: i64,
+) -> Option<i64> {
+    let should_skip = reset_at.is_some()
+        || has_active_reset_countdown
+        || percentage < FULL_QUOTA_WAKEUP_THRESHOLD;
+    if should_skip {
+        return None;
+    }
+
+    if last_run_at
+        .map(|value| now_ts.saturating_sub(value) < FULL_QUOTA_WITHOUT_RESET_COOLDOWN_SECONDS)
+        .unwrap_or(false)
+    {
+        return None;
+    }
+
+    Some(now_ts)
+}
+
+fn has_active_reset_countdown(reset_at: Option<i64>, now_ts: i64) -> bool {
+    reset_at.map(|ts| ts > now_ts).unwrap_or(false)
+}
+
+fn collect_task_reset_timestamps(task: &codex_wakeup::CodexWakeupTask) -> Vec<i64> {
+    if task.account_ids.is_empty() {
+        return Vec::new();
+    }
+
+    let quota_reset_window = task
+        .schedule
+        .quota_reset_window
+        .as_deref()
+        .unwrap_or("either");
+    let selected: HashSet<&str> = task.account_ids.iter().map(String::as_str).collect();
+    let mut timestamps: Vec<i64> = codex_account::list_accounts()
+        .into_iter()
+        .filter(|account| selected.contains(account.id.as_str()))
+        .flat_map(|account| account.quota.into_iter())
+        .flat_map(|quota| {
+            let mut values = Vec::new();
+            if quota_window_matches_filter(
+                quota_reset_window,
+                "primary_window",
+                quota.hourly_window_minutes,
+                PRIMARY_WINDOW_FALLBACK_MINUTES,
+            ) {
+                values.push(quota.hourly_reset_time);
+            }
+            if quota_window_matches_filter(
+                quota_reset_window,
+                "secondary_window",
+                quota.weekly_window_minutes,
+                SECONDARY_WINDOW_FALLBACK_MINUTES,
+            ) {
+                values.push(quota.weekly_reset_time);
+            }
+            values
+        })
+        .flatten()
+        .filter(|ts| *ts > 0)
+        .collect();
+    timestamps.sort_unstable();
+    timestamps.dedup();
+    timestamps
 }
 
 fn push_latest_due_at(latest_ts: &mut i64, due_at: Option<i64>) {
@@ -147,6 +217,19 @@ fn collect_quota_reset_candidates(
         let mut latest_ts = 0i64;
 
         if include_primary {
+            let account_has_active_reset_countdown =
+                has_active_reset_countdown(quota.hourly_reset_time, now_ts)
+                    || has_active_reset_countdown(quota.weekly_reset_time, now_ts);
+            push_latest_due_at(
+                &mut latest_ts,
+                full_quota_without_reset_due_at(
+                    quota.hourly_percentage,
+                    quota.hourly_reset_time,
+                    account_has_active_reset_countdown,
+                    last_run_at,
+                    now_ts,
+                ),
+            );
             push_latest_due_at(
                 &mut latest_ts,
                 quota.hourly_reset_time.and_then(|ts| {
@@ -163,6 +246,19 @@ fn collect_quota_reset_candidates(
         }
 
         if include_secondary {
+            let account_has_active_reset_countdown =
+                has_active_reset_countdown(quota.hourly_reset_time, now_ts)
+                    || has_active_reset_countdown(quota.weekly_reset_time, now_ts);
+            push_latest_due_at(
+                &mut latest_ts,
+                full_quota_without_reset_due_at(
+                    quota.weekly_percentage,
+                    quota.weekly_reset_time,
+                    account_has_active_reset_countdown,
+                    last_run_at,
+                    now_ts,
+                ),
+            );
             push_latest_due_at(
                 &mut latest_ts,
                 quota.weekly_reset_time.and_then(|ts| {
@@ -291,10 +387,14 @@ pub fn calculate_next_run_at(task: &codex_wakeup::CodexWakeupTask) -> Option<i64
                 i64::from(task.schedule.interval_hours.unwrap_or(4).max(1)) * 3600;
             Some(task.last_run_at.unwrap_or(task.created_at) + interval_seconds)
         }
-        "quota_reset" => collect_quota_reset_candidates(task, now.timestamp())
-            .into_iter()
-            .map(|candidate| candidate.due_at)
-            .min(),
+        "quota_reset" => current_due_at(task, now)
+            .map(|(due_at, _)| due_at)
+            .or_else(|| {
+                collect_task_reset_timestamps(task)
+                    .into_iter()
+                    .filter(|reset_at| *reset_at > now.timestamp())
+                    .min()
+            }),
         _ => None,
     }
 }
