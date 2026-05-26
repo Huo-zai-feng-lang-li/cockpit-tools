@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.50] - 2026-05-26
+### Fixed
+- **Release runner setup**: Removed the Release workflow dependency on downloading the `dtolnay/rust-toolchain` action archive and now uses the runner-provided `rustup` to install Rust stable and target triples.
+
 ## [0.20.49] - 2026-05-26
 ### Fixed
 - **Release pipeline recovery**: Completed the Rust lockfile version and bilingual release notes so the Release workflow can generate artifacts for the new tag.

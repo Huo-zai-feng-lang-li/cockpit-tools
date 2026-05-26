@@ -46,9 +46,13 @@ jobs:
           sudo apt-get install -y libnm-dev xdg-utils
 
       - name: Rust setup
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || (contains(matrix.args, 'aarch64') && 'aarch64-unknown-linux-gnu' || '') }}
+        shell: bash
+        run: |
+          rustup default stable
+          targets="${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin x86_64-apple-darwin' || (contains(matrix.args, 'aarch64') && 'aarch64-unknown-linux-gnu' || '') }}"
+          for target in $targets; do
+            rustup target add "$target"
+          done
 
       - name: Node.js setup
         uses: actions/setup-node@v4

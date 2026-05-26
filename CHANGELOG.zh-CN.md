@@ -8,6 +8,10 @@
 
 ---
 
+## [0.20.50] - 2026-05-26
+### 修复
+- **Release Runner 初始化**：移除发布流程对 `dtolnay/rust-toolchain` action 归档下载的依赖，改用 runner 自带 `rustup` 安装 Rust stable 与目标平台。
+
 ## [0.20.49] - 2026-05-26
 ### 修复
 - **发布链路恢复**：补齐 Rust 锁文件版本与双语发布说明，确保 Release workflow 能为新标签生成发布产物。
