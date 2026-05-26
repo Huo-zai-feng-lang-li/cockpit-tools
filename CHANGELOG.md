@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.49] - 2026-05-26
+### Fixed
+- **Release pipeline recovery**: Completed the Rust lockfile version and bilingual release notes so the Release workflow can generate artifacts for the new tag.
+
 ## [0.20.47] - 2026-05-26
 ### Fixed
 - **Cross-platform compilation error**: Fixed compile failures on non-Windows platforms (like Linux/macOS) due to missing `RuntimeTokens` type and related helper function gating.
