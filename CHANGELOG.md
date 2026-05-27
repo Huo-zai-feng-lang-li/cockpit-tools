@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.54] - 2026-05-27
+### Added
+- **Codex hot-switch runtime warmup**: Warms up the Antigravity Codex plugin runtime before plugin hot switching, caches the last working Inspector endpoint, and keeps the actual hot switch as the final authority when warmup is unavailable.
+- **Project release rules**: Added repository rules for CI, versioning, changelog updates, tag deployment, and post-release verification.
+
+## [0.20.53] - 2026-05-27
+### Added
+- **Codex switch target controls**: Adds a master switch for click-to-switch runtime syncing, with separate controls for Antigravity IDE plugin hot switching and desktop Codex App restart switching.
+
+### Changed
+- **Codex switch behavior**: Click-to-switch now targets the selected runtime path instead of forcing plugin and desktop flows together.
+- **Codex hot-switch speed**: Reuses the last successful Antigravity Inspector endpoint and shortens runtime wait windows to reduce hot-switch latency.
+
 ## [0.20.52] - 2026-05-27
 ### Fixed
 - **Release workflow asset convergence**: Uploads all platform artifacts into one draft release before rebuilding merged `latest.json`, so Windows updater assets are present alongside macOS and Linux assets.
