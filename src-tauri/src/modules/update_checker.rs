@@ -8,6 +8,9 @@ const LEGACY_DEFAULT_CHECK_INTERVAL_HOURS: u64 = 24;
 const LEGACY_PREVIOUS_DEFAULT_CHECK_INTERVAL_HOURS: u64 = 6;
 const PENDING_UPDATE_NOTES_FILE: &str = "pending_update_notes.json";
 
+const CHANGELOG_EN: &str = include_str!("../../../CHANGELOG.md");
+const CHANGELOG_ZH: &str = include_str!("../../../CHANGELOG.zh-CN.md");
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateSettings {
     pub auto_check: bool,
@@ -241,6 +244,28 @@ pub fn update_last_check_time() -> Result<(), String> {
     save_update_settings(&settings)
 }
 
+/// Helper to extract version notes from a markdown changelog string
+fn extract_version_notes(changelog: &str, version: &str) -> String {
+    let mut notes = Vec::new();
+    let version_header = format!("## [{}]", version);
+    let mut found = false;
+
+    for line in changelog.lines() {
+        if line.starts_with(&version_header) {
+            found = true;
+            continue;
+        }
+        if found {
+            if line.starts_with("## [") || line.starts_with("---") {
+                break;
+            }
+            notes.push(line);
+        }
+    }
+
+    notes.join("\n").trim().to_string()
+}
+
 /// Check if a version jump occurred (app was updated since last run)
 /// Returns Some(VersionJumpInfo) if the current version is higher than the last recorded version
 pub fn check_version_jump() -> Result<Option<VersionJumpInfo>, String> {
@@ -282,6 +307,22 @@ pub fn check_version_jump() -> Result<Option<VersionJumpInfo>, String> {
         Err(err) => {
             logger::log_error(&format!("读取待安装更新说明失败: {}", err));
         }
+    }
+
+    // Heuristic: If release notes are empty, fall back to extracting from embedded CHANGELOG.md files.
+    if release_notes.is_empty() {
+        release_notes = extract_version_notes(CHANGELOG_EN, &current);
+    }
+    if release_notes_zh.is_empty() {
+        release_notes_zh = extract_version_notes(CHANGELOG_ZH, &current);
+    }
+
+    // Ultimate fallback if extracting from CHANGELOG still yielded empty results (e.g. version tag not in CHANGELOG yet)
+    if release_notes.is_empty() {
+        release_notes = "- Minor bug fixes and performance improvements.".to_string();
+    }
+    if release_notes_zh.is_empty() {
+        release_notes_zh = "- 修复已知问题，优化系统性能与稳定性。".to_string();
     }
 
     // Update the stored version
@@ -330,5 +371,19 @@ mod tests {
     fn test_compare_versions_handles_longer_version_segments() {
         assert!(compare_versions("1.0.0.1", "1.0.0"));
         assert!(!compare_versions("1.0.0", "1.0.0.1"));
+    }
+
+    #[test]
+    fn test_extract_version_notes() {
+        let notes_en = extract_version_notes(CHANGELOG_EN, "0.20.56");
+        let notes_zh = extract_version_notes(CHANGELOG_ZH, "0.20.56");
+        assert!(!notes_en.is_empty(), "English changelog for 0.20.56 should not be empty");
+        assert!(!notes_zh.is_empty(), "Chinese changelog for 0.20.56 should not be empty");
+        assert!(notes_en.contains("Codex Switch Account Restart"));
+        assert!(notes_zh.contains("Codex 切号重启与降级恢复"));
+
+        // Test empty version extraction
+        let empty_en = extract_version_notes(CHANGELOG_EN, "9.99.99");
+        assert!(empty_en.is_empty(), "Non-existent version extraction should yield empty string");
     }
 }
