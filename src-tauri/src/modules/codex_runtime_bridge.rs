@@ -65,6 +65,24 @@ pub async fn hot_switch_account(
     }
 }
 
+pub async fn warm_up_runtime() -> Result<String, String> {
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Codex runtime 预热仅支持 Windows 上的 Antigravity 插件 Inspector".to_string())
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        match warm_up_via_antigravity_inspector().await {
+            Ok(runtime) => Ok(runtime),
+            Err(err) => {
+                logger::log_warn(&format!("[Codex HotSwitch] 预热 Antigravity 插件运行时失败: {}", err));
+                Err(err)
+            }
+        }
+    }
+}
+
 #[cfg(target_os = "windows")]
 #[derive(Debug, Clone, Deserialize)]
 struct InspectorPort {
@@ -127,6 +145,43 @@ async fn hot_switch_via_antigravity_inspector(
 }
 
 #[cfg(target_os = "windows")]
+async fn warm_up_via_antigravity_inspector() -> Result<String, String> {
+    if let Some(endpoint) = cached_inspector_endpoint() {
+        match warm_up_with_inspector_endpoint(&endpoint).await {
+            Ok(runtime) => return Ok(runtime),
+            Err(err) => logger::log_info(&format!(
+                "[Codex HotSwitch] 缓存 Inspector 预热点失效: pid={}, port={}, error={}",
+                endpoint.pid, endpoint.port, err
+            )),
+        }
+    }
+
+    let endpoints = discover_antigravity_inspector_endpoints().await?;
+    if endpoints.is_empty() {
+        return Err("未发现 Antigravity 扩展宿主 Inspector 端口".to_string());
+    }
+
+    let mut errors = Vec::new();
+    for endpoint in endpoints {
+        match warm_up_with_inspector_endpoint(&endpoint).await {
+            Ok(runtime) => {
+                remember_inspector_endpoint(&endpoint);
+                return Ok(runtime);
+            }
+            Err(err) => errors.push(format!(
+                "pid={},port={}: {}",
+                endpoint.pid, endpoint.port, err
+            )),
+        }
+    }
+
+    Err(format!(
+        "Antigravity Inspector 均未完成预热: {}",
+        errors.join(" | ")
+    ))
+}
+
+#[cfg(target_os = "windows")]
 fn cached_inspector_endpoint() -> Option<InspectorEndpoint> {
     LAST_INSPECTOR_ENDPOINT.lock().ok()?.clone()
 }
@@ -149,12 +204,17 @@ fn build_hot_switch_result(
         endpoint.pid, endpoint.port, account.email
     ));
     CodexHotSwitchRuntimeResult {
-        runtime: format!(
-            "antigravity-codex-extension-inspector:pid={},port={}",
-            endpoint.pid, endpoint.port
-        ),
+        runtime: format_runtime_name(endpoint),
         rate_limits,
     }
+}
+
+#[cfg(target_os = "windows")]
+fn format_runtime_name(endpoint: &InspectorEndpoint) -> String {
+    format!(
+        "antigravity-codex-extension-inspector:pid={},port={}",
+        endpoint.pid, endpoint.port
+    )
 }
 
 #[cfg(target_os = "windows")]
@@ -344,6 +404,17 @@ async fn hot_switch_with_inspector_endpoint(
         .get("rateLimits")
         .cloned()
         .filter(|item| !item.is_null()))
+}
+
+#[cfg(target_os = "windows")]
+async fn warm_up_with_inspector_endpoint(endpoint: &InspectorEndpoint) -> Result<String, String> {
+    let mut client = CdpClient::connect(&endpoint.ws_url).await?;
+    let _ = client.find_codex_mcp_instance().await?;
+    logger::log_info(&format!(
+        "[Codex HotSwitch] Antigravity 插件运行时预热完成: pid={}, port={}",
+        endpoint.pid, endpoint.port
+    ));
+    Ok(format_runtime_name(endpoint))
 }
 
 #[cfg(target_os = "windows")]

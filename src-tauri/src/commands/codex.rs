@@ -18,6 +18,11 @@ pub struct CodexHotSwitchResponse {
     pub rate_limits: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodexRuntimeWarmupResponse {
+    pub runtime: String,
+}
+
 /// 列出所有 Codex 账号
 #[tauri::command]
 pub fn list_codex_accounts() -> Result<Vec<CodexAccount>, String> {
@@ -167,6 +172,12 @@ pub async fn hot_switch_codex_account(
         runtime: runtime.runtime,
         rate_limits: runtime.rate_limits,
     })
+}
+
+#[tauri::command]
+pub async fn warm_up_codex_runtime() -> Result<CodexRuntimeWarmupResponse, String> {
+    let runtime = codex_runtime_bridge::warm_up_runtime().await?;
+    Ok(CodexRuntimeWarmupResponse { runtime })
 }
 
 async fn run_codex_post_refresh_checks(app: &AppHandle) {

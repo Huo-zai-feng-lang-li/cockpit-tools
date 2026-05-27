@@ -38,6 +38,10 @@ export interface CodexHotSwitchResponse {
   rate_limits?: unknown;
 }
 
+export interface CodexRuntimeWarmupResponse {
+  runtime: string;
+}
+
 /** Codex 配额数据 */
 export interface CodexQuota {
   /** 5小时配额百分比 (0-100) */

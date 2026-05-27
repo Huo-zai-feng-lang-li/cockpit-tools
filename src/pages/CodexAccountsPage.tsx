@@ -708,7 +708,14 @@ export function CodexAccountsPage() {
       }
 
       const account = usePlugin
-        ? await hotSwitchAccount(accountId)
+        ? await (async () => {
+            try {
+              await codexService.warmUpCodexRuntime();
+            } catch (error) {
+              console.info('[Codex HotSwitch] runtime warmup skipped:', error);
+            }
+            return hotSwitchAccount(accountId);
+          })()
         : await switchAccount(accountId);
 
       if (usePlugin && useDesktop) {
