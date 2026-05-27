@@ -8,6 +8,7 @@ import {
 } from '../types/codex';
 import * as codexService from '../services/codexService';
 import { emitAccountsChanged, emitCurrentAccountChanged } from '../utils/accountSyncEvents';
+import { message as showMessage } from '@tauri-apps/plugin-dialog';
 
 const CODEX_ACCOUNTS_CACHE_KEY = 'agtools.codex.accounts.cache';
 const CODEX_CURRENT_ACCOUNT_CACHE_KEY = 'agtools.codex.accounts.current';
@@ -139,6 +140,20 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
       accountId: account.id,
       reason: 'hot_switch',
     });
+
+    if (response.hot_switch_error) {
+      console.warn('[Codex HotSwitch] CDP channel failed, showing degraded notification:', response.hot_switch_error);
+      try {
+        const messageText = response.shortcut_injected
+          ? '未检测到 IDE 调试端口，无感切换受限。\n\n凭证已成功保存！我们已自动为您在桌面的 Antigravity 快捷方式中注入了调试端口配置，请直接通过该快捷方式重启 IDE，以后即可永久享受 100ms 极速无感热切！'
+          : '未检测到 IDE 调试端口或连接受限，无感切换受限。\n\n凭证已成功保存，请重启 Antigravity IDE 以使新账号生效！';
+        
+        await showMessage(messageText, { title: '切号提示', kind: 'warning' });
+      } catch (err) {
+        console.error('Failed to show message dialog:', err);
+      }
+    }
+
     return account;
   },
 

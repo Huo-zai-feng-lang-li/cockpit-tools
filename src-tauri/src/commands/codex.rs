@@ -16,6 +16,10 @@ pub struct CodexHotSwitchResponse {
     pub runtime: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rate_limits: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hot_switch_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shortcut_injected: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -167,7 +171,18 @@ pub async fn hot_switch_codex_account(
         prepared.id, prepared.email
     ));
 
-    let runtime = codex_runtime_bridge::hot_switch_account(&prepared).await?;
+    let (runtime_name, rate_limits, hot_switch_error, shortcut_injected) = match codex_runtime_bridge::hot_switch_account(&prepared).await {
+        Ok(runtime) => (runtime.runtime, runtime.rate_limits, None, None),
+        Err(err) => {
+            logger::log_warn(&format!(
+                "[Codex HotSwitch] 运行时无感热切失败，已降级为重启生效模式: {}",
+                err
+            ));
+            let injected = codex_runtime_bridge::try_inject_shortcut_debugging_port();
+            ("none".to_string(), None, Some(err), Some(injected))
+        }
+    };
+
     let account = codex_account::activate_account_after_runtime_switch(&account_id)?;
 
     if let Err(e) = crate::modules::codex_instance::update_default_settings(
@@ -184,8 +199,10 @@ pub async fn hot_switch_codex_account(
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(CodexHotSwitchResponse {
         account,
-        runtime: runtime.runtime,
-        rate_limits: runtime.rate_limits,
+        runtime: runtime_name,
+        rate_limits,
+        hot_switch_error,
+        shortcut_injected,
     })
 }
 

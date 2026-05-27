@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.56] - 2026-05-27
+### Fixed
+- **Codex Switch Account Restart & Degraded Fallback**: Integrated a degraded recovery flow for Codex account hot switching. If the runtime fails to hot-switch via CDP, the client automatically falls back to offline disk-state persistence and shows a descriptive warning dialog advising a restart.
+- **Auto-Injection of Debugging Port to Desktop Shortcuts**: Added a Windows-specific PowerShell shortcut injector that automatically adds `--remote-debugging-port=9000` to the target arguments of Desktop and Public Desktop shortcuts matching `Antigravity.exe` upon a failed hot-switch, enabling permanent 100ms seamless hot switching on the next launch.
+
+## [0.20.55] - 2026-05-27
+### Added
+- **Two-way Provider Hijacking (OAuth Credential Injection)**: Introduced a safe "intercept-rewrite-restore" two-way hijacking mechanism targeting the original `auth` Namespace Provider's `onResult` and `onNotification` methods. Fully resolves the race conditions causing stale models and sessions due to missing frontend refresh after account switching. Safely restores the original provider after the transaction completes, preventing architectural pollution.
+- **Port Discovery Compatibility**: Extended the Windows PowerShell port discovery script to support and auto-detect both `--remote-debugging-port` and `--inspect-port` host processes for `Antigravity.exe`.
+
 ## [0.20.54] - 2026-05-27
 ### Added
 - **Codex hot-switch runtime warmup**: Warms up the Antigravity Codex plugin runtime before plugin hot switching, caches the last working Inspector endpoint, and keeps the actual hot switch as the final authority when warmup is unavailable.

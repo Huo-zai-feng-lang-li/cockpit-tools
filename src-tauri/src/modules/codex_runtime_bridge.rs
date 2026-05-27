@@ -834,3 +834,74 @@ fn verify_runtime_account(value: &Value, target: &CodexAccount) -> Result<(), St
 
     Ok(())
 }
+
+#[cfg(target_os = "windows")]
+pub fn try_inject_shortcut_debugging_port() -> bool {
+    use std::process::Command;
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    
+    let script = r#"
+try {
+    $shell = New-Object -ComObject WScript.Shell
+    $paths = @("$env:USERPROFILE\Desktop", "C:\Users\Public\Desktop")
+    $injected = 0
+    foreach ($path in $paths) {
+        if (Test-Path $path) {
+            $shortcuts = Get-ChildItem -Path $path -Filter "*.lnk"
+            foreach ($s in $shortcuts) {
+                try {
+                    $lnk = $shell.CreateShortcut($s.FullName)
+                    if ($lnk.TargetPath -like "*Antigravity.exe*") {
+                        if ($lnk.Arguments -notlike "*--remote-debugging-port*") {
+                            $lnk.Arguments = ($lnk.Arguments + " --remote-debugging-port=9000").Trim()
+                            $lnk.Save()
+                            $injected++
+                        }
+                    }
+                } catch {}
+            }
+        }
+    }
+    Write-Output $injected
+} catch {
+    Write-Output 0
+}
+"#;
+
+    let command_text = format!(
+        "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $OutputEncoding=[System.Text.Encoding]::UTF8; {}",
+        script
+    );
+
+    let output = Command::new("powershell")
+        .creation_flags(CREATE_NO_WINDOW)
+        .arg("-NoProfile")
+        .arg("-Command")
+        .arg(&command_text)
+        .output();
+
+    match output {
+        Ok(out) => {
+            let res = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let count = res.parse::<i32>().unwrap_or(0);
+            logger::log_info(&format!(
+                "[Shortcut Injector] 快捷方式注入调试参数运行完毕: res={}, count={}, err={}",
+                res,
+                count,
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+            count > 0
+        }
+        Err(e) => {
+            logger::log_warn(&format!("[Shortcut Injector] 执行 PowerShell 注入快捷方式失败: {}", e));
+            false
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn try_inject_shortcut_debugging_port() -> bool {
+    false
+}

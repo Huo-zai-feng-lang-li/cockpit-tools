@@ -8,6 +8,16 @@
 
 ---
 
+## [0.20.56] - 2026-05-27
+### 修复
+- **Codex 切号重启与降级恢复**: 集成 Codex 账号无感热切失败时的降级逻辑，在 CDP 通道连接受限或无感切换失败时，自动降级为磁盘状态落地保存，并弹出弹窗提示用户重启 IDE 生效。
+- **桌面快捷方式调试端口自动注入**: 针对 Windows 平台，热切失败降级时自动通过 PowerShell 脚本扫描桌面及公用桌面的 Antigravity 快捷方式，自动在目标参数后注入 `--remote-debugging-port=9000` 参数，确保用户下次通过快捷方式启动后即可永久享受无感热切。
+
+## [0.20.55] - 2026-05-27
+### 新增
+- **双向劫持机制（OAuth 凭证注入）**：通过“拦截-重写-恢复”的安全双向劫持机制，直接劫持原始 `auth` Namespace Provider 的 `onResult` 与 `onNotification`。彻底解决了在切换账号后因前端未刷新导致模型与会话不同步的 Race Condition。在切换完成后立即恢复原始 Provider，避免对框架的侵入与污染。
+- **端口探测支持**：扩展 Windows 端口探测 PowerShell 脚本，自动兼容识别通过 `--remote-debugging-port` 与 `--inspect-port` 启动的 Antigravity.exe 宿主进程。
+
 ## [0.20.54] - 2026-05-27
 ### 新增
 - **Codex 无感换号运行时预热**：插件无感换号前先预热反重力 IDE 内的 Codex 插件 runtime，缓存上次可用的 Inspector 端点；预热不可用时仍以真实热切结果为准。

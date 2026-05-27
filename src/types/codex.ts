@@ -36,6 +36,8 @@ export interface CodexHotSwitchResponse {
   account: CodexAccount;
   runtime: string;
   rate_limits?: unknown;
+  hot_switch_error?: string;
+  shortcut_injected?: boolean;
 }
 
 export interface CodexRuntimeWarmupResponse {
