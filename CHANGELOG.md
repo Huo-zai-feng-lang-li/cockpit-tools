@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.57] - 2026-05-27
+### Fixed
+- **Changelog Embedding Path**: Corrected the static inclusion path of bilingual changelog files in `update_checker.rs` to fix build-time path lookup errors.
+- **Bilingual Release Notes Fallback**: Added auto-fallback bilingual release notes when version details extraction is empty, preventing blank upgrade dialog displays on the frontend.
+- **Changelog Extraction Unit Tests**: Added unit tests validating bilingual version notes extraction and fallback behaviors.
+
 ## [0.20.56] - 2026-05-27
 ### Fixed
 - **Codex Switch Account Restart & Degraded Fallback**: Integrated a degraded recovery flow for Codex account hot switching. If the runtime fails to hot-switch via CDP, the client automatically falls back to offline disk-state persistence and shows a descriptive warning dialog advising a restart.
