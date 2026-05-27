@@ -6281,18 +6281,9 @@ pub fn collect_codex_process_entries() -> Vec<(u32, Option<String>)> {
     Vec::new()
 }
 
-/// 判断 Codex 是否在运行（仅 macOS）
-#[cfg(target_os = "macos")]
+/// 判断 Codex 是否在运行
 pub fn is_codex_running() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        !collect_codex_process_entries().is_empty()
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        false
-    }
+    !collect_codex_process_entries().is_empty()
 }
 
 /// 启动 Codex（支持 CODEX_HOME 与附加参数，仅 macOS）

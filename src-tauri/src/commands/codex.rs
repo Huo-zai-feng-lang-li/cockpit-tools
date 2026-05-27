@@ -49,7 +49,25 @@ pub async fn switch_codex_account(
 ) -> Result<CodexAccount, String> {
     let _ = codex_account::prepare_account_for_injection(&account_id).await?;
 
-    // 切换账号（写入 auth.json）
+    // 1. 查找并优雅关闭所有正在运行的 Codex 桌面端进程，确保凭证替换不会被运行中的进程内存状态覆盖
+    let process_entries = process::collect_codex_process_entries();
+    if !process_entries.is_empty() {
+        logger::log_info(&format!(
+            "检测到 Codex 正在运行，切换账号前准备关闭 {} 个 Codex 进程以防止凭证覆盖",
+            process_entries.len()
+        ));
+        for (pid, _) in process_entries {
+            if let Err(e) = process::close_pid(pid, 20) {
+                logger::log_warn(&format!("关闭 Codex 进程 pid={} 失败: {}", pid, e));
+            }
+        }
+        // 清理所有实例的 PID 缓存，避免状态脏乱
+        if let Err(e) = crate::modules::codex_instance::clear_all_pids() {
+            logger::log_warn(&format!("清理 Codex 实例 PID 缓存失败: {}", e));
+        }
+    }
+
+    // 2. 切换账号（写入 auth.json）
     let account = codex_account::switch_account(&account_id)?;
 
     // 同步更新 Codex 默认实例的绑定账号（不同步到 Antigravity，因为账号体系不同）
@@ -115,10 +133,7 @@ pub async fn switch_codex_account(
     }
 
     if user_config.codex_launch_on_switch {
-        #[cfg(target_os = "macos")]
-        if process::is_codex_running() {
-            logger::log_info("检测到 Codex 正在运行，将按默认实例 PID 逻辑重启");
-        }
+        logger::log_info("准备启动/重启 Codex 默认实例");
         match crate::commands::codex_instance::codex_start_instance("__default__".to_string()).await
         {
             Ok(_) => {}

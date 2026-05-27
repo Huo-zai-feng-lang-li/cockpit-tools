@@ -258,8 +258,8 @@ fn discover_antigravity_inspector_ports() -> Result<Vec<InspectorPort>, String> 
 $items = @()
 $processes = Get-CimInstance Win32_Process -Filter "Name='Antigravity.exe'" |
   Where-Object {
-    $_.CommandLine -match 'node\.mojom\.NodeService' -and
-    $_.CommandLine -match '--inspect-port'
+    ($_.CommandLine -match 'node\.mojom\.NodeService' -and $_.CommandLine -match '--inspect-port') -or
+    ($_.CommandLine -match '--remote-debugging-port')
   }
 foreach ($process in $processes) {
   $connections = Get-NetTCPConnection -State Listen -OwningProcess $process.ProcessId -ErrorAction SilentlyContinue |
@@ -635,118 +635,127 @@ const HOT_SWITCH_FUNCTION: &str = r#"async function(payload) {
   if (!this.initialized) {
     throw new Error('Codex app-server is not initialized');
   }
-  if (this.__cockpitHotSwitchProvider && typeof this.__cockpitHotSwitchProvider.dispose === 'function') {
-    try { this.__cockpitHotSwitchProvider.dispose(); } catch {}
+
+  const originalProvider = this.providers.get('auth');
+  if (!originalProvider) {
+    throw new Error('Original auth provider not found');
   }
 
-  const namespace = 'cockpit-hot-switch';
+  const originalOnResult = originalProvider.onResult;
+  const originalOnNotification = originalProvider.onNotification;
+
   const pending = new Map();
   const notifications = [];
-  const provider = {
-    onResult: (message) => {
+
+  try {
+    // 劫持原始 provider
+    originalProvider.onResult = (message) => {
       const key = String(message.id);
       const waiter = pending.get(key);
-      if (!waiter) return;
-      pending.delete(key);
-      if (message.error) {
-        const errorText = typeof message.error === 'string'
-          ? message.error
-          : JSON.stringify(message.error);
-        waiter.reject(new Error(errorText));
-      } else {
-        waiter.resolve(message.result ?? null);
-      }
-    },
-    onRequest: (message) => {
-      if (message.method !== 'account/chatgptAuthTokens/refresh') return;
-      this.sendResponse(message.id, {
-        accessToken: payload.accessToken,
-        chatgptAccountId: payload.chatgptAccountId,
-        chatgptPlanType: payload.chatgptPlanType ?? null
-      });
-    },
-    onNotification: (message) => {
-      notifications.push({ method: message.method, params: message.params });
-    }
-  };
-
-  const disposable = this.registerProvider(namespace, provider);
-  this.__cockpitHotSwitchProvider = disposable;
-
-  const request = (method, params, timeoutMs = 4000) => new Promise((resolve, reject) => {
-    const id = `${Date.now()}-${Math.random()}`;
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error(`${method} timeout`));
-    }, timeoutMs);
-    pending.set(id, {
-      resolve: (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      reject: (error) => {
-        clearTimeout(timer);
-        reject(error);
-      }
-    });
-    this.sendRequest(namespace, id, method, params);
-  });
-
-  const waitForLoginSettle = () => new Promise((resolve, reject) => {
-    const startedAt = Date.now();
-    const tick = () => {
-      const notification = notifications.find((item) =>
-        item.method === 'account/login/completed' || item.method === 'account/updated'
-      );
-      if (notification) {
-        if (
-          notification.method === 'account/login/completed' &&
-          notification.params &&
-          notification.params.success === false
-        ) {
-          reject(new Error(notification.params.error || 'account/login/completed failed'));
+      if (waiter) {
+        pending.delete(key);
+        if (message.error) {
+          const errorText = typeof message.error === 'string'
+            ? message.error
+            : JSON.stringify(message.error);
+          waiter.reject(new Error(errorText));
         } else {
-          resolve(notification);
+          waiter.resolve(message.result ?? null);
         }
-        return;
+      } else {
+        if (typeof originalOnResult === 'function') {
+          try { originalOnResult(message); } catch {}
+        }
       }
-      if (Date.now() - startedAt > 1500) {
-        resolve(null);
-        return;
-      }
-      setTimeout(tick, 50);
     };
-    tick();
-  });
 
-  await request('account/login/start', {
-    type: 'chatgptAuthTokens',
-    accessToken: payload.accessToken,
-    chatgptAccountId: payload.chatgptAccountId,
-    chatgptPlanType: payload.chatgptPlanType ?? null
-  });
-  await waitForLoginSettle();
+    originalProvider.onNotification = (message) => {
+      notifications.push({ method: message.method, params: message.params });
+      if (typeof originalOnNotification === 'function') {
+        try { originalOnNotification(message); } catch {}
+      }
+    };
 
-  const accountRead = await request('account/read', { refresh: false });
-  const actualEmail = accountRead?.account?.email || '';
-  if (actualEmail.toLowerCase() !== String(payload.expectedEmail).toLowerCase()) {
-    throw new Error(`runtime account mismatch: ${actualEmail} != ${payload.expectedEmail}`);
+    const request = (method, params, timeoutMs = 8000) => new Promise((resolve, reject) => {
+      const id = `${Date.now()}-${Math.random()}`;
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error(`${method} timeout`));
+      }, timeoutMs);
+      pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        }
+      });
+      this.sendRequest('auth', id, method, params);
+    });
+
+    const waitForLoginSettle = () => new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+      const tick = () => {
+        const notification = notifications.find((item) =>
+          item.method === 'account/login/completed' || item.method === 'account/updated'
+        );
+        if (notification) {
+          if (
+            notification.method === 'account/login/completed' &&
+            notification.params &&
+            notification.params.success === false
+          ) {
+            reject(new Error(notification.params.error || 'account/login/completed failed'));
+          } else {
+            resolve(notification);
+          }
+          return;
+        }
+        if (Date.now() - startedAt > 2000) {
+          resolve(null);
+          return;
+        }
+        setTimeout(tick, 50);
+      };
+      tick();
+    });
+
+    await request('account/login/start', {
+      type: 'chatgptAuthTokens',
+      accessToken: payload.accessToken,
+      chatgptAccountId: payload.chatgptAccountId,
+      chatgptPlanType: payload.chatgptPlanType ?? null
+    });
+    await waitForLoginSettle();
+
+    const accountRead = await request('account/read', { refresh: false });
+    const actualEmail = accountRead?.account?.email || '';
+    if (actualEmail.toLowerCase() !== String(payload.expectedEmail).toLowerCase()) {
+      throw new Error(`runtime account mismatch: ${actualEmail} != ${payload.expectedEmail}`);
+    }
+
+    let rateLimits = null;
+    let rateLimitsError = null;
+    try {
+      rateLimits = await request('account/rateLimits/read', {});
+    } catch (error) {
+      rateLimitsError = String(error?.message || error);
+    }
+
+    return {
+      ok: true,
+      accountRead,
+      rateLimits,
+      rateLimitsError
+    };
+
+  } finally {
+    // 恢复原始提供者
+    originalProvider.onResult = originalOnResult;
+    originalProvider.onNotification = originalOnNotification;
   }
-
-  let rateLimits = null;
-  let rateLimitsError = null;
-  try {
-    rateLimits = await request('account/rateLimits/read', {});
-  } catch (error) {
-    rateLimitsError = String(error?.message || error);
-  }
-
-  return {
-    ok: true,
-    accountRead,
-    rateLimits,
-    rateLimitsError
-  };
 }"#;
 
 #[cfg(target_os = "windows")]
