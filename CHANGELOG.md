@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.61] - 2026-05-28
+### Fixed
+- **Codex hot-switch runtime discovery**: Added a direct module-cache scan for the current Antigravity Codex runtime instance and hardened the fallback `activate` lookup against the newer Electron process shape.
+
 ## [0.20.60] - 2026-05-28
 ### Fixed
 - **Release build config alignment**: Added the missing `codex_all_accounts_auto_refresh_minutes` field to the backend `UserConfig` initializer in `save_network_config`, which was still blocking the release workflow from compiling.

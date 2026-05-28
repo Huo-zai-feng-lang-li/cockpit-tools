@@ -356,20 +356,89 @@ pub async fn request_plugin_switch_account(
     };
 
     let server = get_server();
-    let json = serde_json::to_string(&msg).map_err(|e| format!("序列化无感切号请求失败: {}", e))?;
-    if server.tx.send(json).is_err() {
+    let started = std::time::Instant::now();
+    let pending_count = {
+        let pending = PLUGIN_SWITCH_PENDING.lock().await;
+        pending.len()
+    };
+    let json = serde_json::to_string(&msg).map_err(|e| {
+        crate::modules::logger::log_warn(&format!(
+            "[WS] 无感切号请求序列化失败: request_id={}, to_email={}, switch_mode={}, timeout_ms={}, pending_count={}, error={}",
+            request_id,
+            email,
+            switch_mode,
+            timeout_ms,
+            pending_count,
+            e
+        ));
+        format!("序列化无感切号请求失败: {}", e)
+    })?;
+    if let Err(err) = server.tx.send(json) {
         let mut pending = PLUGIN_SWITCH_PENDING.lock().await;
         pending.remove(&request_id);
+        crate::modules::logger::log_warn(&format!(
+            "[WS] 无感切号请求发送失败: request_id={}, to_email={}, switch_mode={}, timeout_ms={}, pending_count={}, error={:?}",
+            request_id,
+            email,
+            switch_mode,
+            timeout_ms,
+            pending.len(),
+            err
+        ));
         return Err("扩展未连接，无法执行无感切号".to_string());
     }
 
+    crate::modules::logger::log_info(&format!(
+        "[WS] 已发送无感切号请求: request_id={}, to_email={}, switch_mode={}, trigger_type={}, trigger_source={}, timeout_ms={}, pending_count={}",
+        request_id,
+        email,
+        switch_mode,
+        trigger_type,
+        trigger_source,
+        timeout_ms,
+        pending_count
+    ));
+
     let wait = tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), rx).await;
     match wait {
-        Ok(Ok(payload)) => Ok(payload),
-        Ok(Err(_)) => Err("扩展已断开，未收到无感切号结果".to_string()),
+        Ok(Ok(payload)) => {
+            let request_id_for_log = payload.request_id.as_deref().unwrap_or(&request_id);
+            let response_log = format!(
+                "[WS] 无感切号请求已匹配响应: request_id={}, execution_id={}, to_email={}, success={}, effective_mode={}, duration_ms={}, roundtrip_ms={}",
+                request_id_for_log,
+                payload.execution_id,
+                payload.to_email,
+                payload.success,
+                payload.effective_mode,
+                payload.duration_ms,
+                started.elapsed().as_millis()
+            );
+            if payload.success {
+                crate::modules::logger::log_info(&response_log);
+            } else {
+                crate::modules::logger::log_warn(&response_log);
+            }
+            Ok(payload)
+        }
+        Ok(Err(_)) => {
+            crate::modules::logger::log_warn(&format!(
+                "[WS] 无感切号请求通道关闭: request_id={}, to_email={}, roundtrip_ms={}",
+                request_id,
+                email,
+                started.elapsed().as_millis()
+            ));
+            Err("扩展已断开，未收到无感切号结果".to_string())
+        }
         Err(_) => {
             let mut pending = PLUGIN_SWITCH_PENDING.lock().await;
             pending.remove(&request_id);
+            crate::modules::logger::log_warn(&format!(
+                "[WS] 无感切号请求等待超时: request_id={}, to_email={}, timeout_ms={}, pending_count={}",
+                request_id,
+                email,
+                timeout_ms,
+                pending.len()
+            ));
             Err(format!("等待扩展无感切号响应超时（{}ms）", timeout_ms))
         }
     }
@@ -815,20 +884,42 @@ async fn handle_client_message(
             };
 
             let Some(req_id) = request_id else {
-                crate::modules::logger::log_warn("[WS] 收到无感切号响应但缺少 request_id");
+                let pending_count = {
+                    let pending = PLUGIN_SWITCH_PENDING.lock().await;
+                    pending.len()
+                };
+                crate::modules::logger::log_warn(&format!(
+                    "[WS] 无感切号响应缺少 request_id: execution_id={}, to_email={}, success={}, effective_mode={}, duration_ms={}, pending_count={}, finished_at={}",
+                    response_payload.execution_id,
+                    response_payload.to_email,
+                    response_payload.success,
+                    response_payload.effective_mode,
+                    response_payload.duration_ms,
+                    pending_count,
+                    response_payload.finished_at
+                ));
                 return Ok(());
             };
 
-            let sender = {
+            let (sender, pending_count) = {
                 let mut pending = PLUGIN_SWITCH_PENDING.lock().await;
-                pending.remove(&req_id)
+                let sender = pending.remove(&req_id);
+                let pending_count = pending.len();
+                (sender, pending_count)
             };
             if let Some(pending_tx) = sender {
                 let _ = pending_tx.send(response_payload);
             } else {
                 crate::modules::logger::log_warn(&format!(
-                    "[WS] 收到无匹配请求的无感切号响应: request_id={}",
-                    req_id
+                    "[WS] 无感切号响应 request_id 未匹配 pending: request_id={}, execution_id={}, to_email={}, success={}, effective_mode={}, duration_ms={}, pending_count={}, finished_at={}",
+                    req_id,
+                    response_payload.execution_id,
+                    response_payload.to_email,
+                    response_payload.success,
+                    response_payload.effective_mode,
+                    response_payload.duration_ms,
+                    pending_count,
+                    response_payload.finished_at
                 ));
             }
         }
