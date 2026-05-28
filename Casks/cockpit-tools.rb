@@ -1,6 +1,6 @@
 cask "cockpit-tools" do
-  version "0.20.57"
-  sha256 "6573f36685fbe4b4cc24f268ed68c59ed04008beb97944dda8bf55a6a02d07e6"
+  version "0.20.60"
+  sha256 "8b0b2fbd8e3289630c3fc0d6d5e687ab8b3edb6e0c93cda95d37792aa065dcdb"
 
   url "https://github.com/Huo-zai-feng-lang-li/cockpit-tools/releases/download/v#{version}/Cockpit.Tools_#{version}_x64.dmg",
       verified: "github.com/Huo-zai-feng-lang-li/cockpit-tools/"
