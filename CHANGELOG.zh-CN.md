@@ -8,6 +8,10 @@
 
 ---
 
+## [0.20.61] - 2026-05-28
+### 修复
+- **Codex 无感切号运行时发现**: 新增对当前 Antigravity Codex runtime 实例的模块缓存直扫，并加固 `activate` 回退入口以兼容新版 Electron 进程形态。
+
 ## [0.20.60] - 2026-05-28
 ### 修复
 - **发布构建配置对齐**: 在后端 `save_network_config` 的 `UserConfig` 初始化里补上缺失的 `codex_all_accounts_auto_refresh_minutes` 字段，恢复 release workflow 的编译链路。

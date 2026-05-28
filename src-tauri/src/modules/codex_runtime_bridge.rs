@@ -337,7 +337,7 @@ async fn read_inspector_ws_urls(
 ) -> Result<Vec<String>, String> {
     let mut ws_urls = Vec::new();
     let json_paths = ["json/list", "json/version"];
-    let hosts = ["127.0.0.1", "localhost", "[::1]"];
+    let hosts = ["127.0.0.1", "localhost"];
 
     for path in json_paths {
         for host in hosts {
@@ -375,7 +375,7 @@ async fn read_inspector_ws_urls(
                         if let Some(ws_url) =
                             entry.get("webSocketDebuggerUrl").and_then(Value::as_str)
                         {
-                            let ws_url = ws_url.to_string();
+                            let ws_url = normalize_inspector_ws_url(ws_url);
                             if !ws_urls.contains(&ws_url) {
                                 ws_urls.push(ws_url);
                             }
@@ -385,7 +385,7 @@ async fn read_inspector_ws_urls(
                 "json/version" => {
                     if let Some(ws_url) = value.get("webSocketDebuggerUrl").and_then(Value::as_str)
                     {
-                        let ws_url = ws_url.to_string();
+                        let ws_url = normalize_inspector_ws_url(ws_url);
                         if !ws_urls.contains(&ws_url) {
                             ws_urls.push(ws_url);
                         }
@@ -404,6 +404,15 @@ async fn read_inspector_ws_urls(
     } else {
         Ok(ws_urls)
     }
+}
+
+#[cfg(target_os = "windows")]
+fn normalize_inspector_ws_url(ws_url: &str) -> String {
+    ws_url
+        .replace("ws://[::1]:", "ws://127.0.0.1:")
+        .replace("wss://[::1]:", "wss://127.0.0.1:")
+        .replace("ws://localhost:", "ws://127.0.0.1:")
+        .replace("wss://localhost:", "wss://127.0.0.1:")
 }
 
 #[cfg(target_os = "windows")]
@@ -506,36 +515,52 @@ impl CdpClient {
         self.socket
             .send(Message::Text(message.to_string().into()))
             .await
-            .map_err(|e| format!("写入 Inspector WebSocket 失败: {}", e))?;
+            .map_err(|e| {
+                format!(
+                    "Inspector WebSocket 写入失败: method={}, id={}, error={}",
+                    method, id, e
+                )
+            })?;
 
         let wait = async {
             loop {
                 let Some(message) = self.socket.next().await else {
                     return Err(format!(
-                        "Inspector WebSocket 已断开，未收到 {} 响应",
-                        method
+                        "Inspector WebSocket 已断开: method={}, id={}",
+                        method, id
                     ));
                 };
-                let message =
-                    message.map_err(|e| format!("读取 Inspector WebSocket 失败: {}", e))?;
+                let message = message.map_err(|e| {
+                    format!(
+                        "Inspector WebSocket 读取失败: method={}, id={}, error={}",
+                        method, id, e
+                    )
+                })?;
                 let text = match message {
                     Message::Text(text) => text.to_string(),
                     Message::Binary(bytes) => String::from_utf8_lossy(&bytes).to_string(),
                     Message::Close(_) => {
                         return Err(format!(
-                            "Inspector WebSocket 已关闭，未收到 {} 响应",
-                            method
+                            "Inspector WebSocket 已关闭: method={}, id={}",
+                            method, id
                         ));
                     }
                     _ => continue,
                 };
-                let value: Value = serde_json::from_str(&text)
-                    .map_err(|e| format!("解析 Inspector 响应失败: {}", e))?;
+                let value: Value = serde_json::from_str(&text).map_err(|e| {
+                    format!(
+                        "Inspector 响应解析失败: method={}, id={}, error={}",
+                        method, id, e
+                    )
+                })?;
                 if value.get("id").and_then(Value::as_u64) != Some(id) {
                     continue;
                 }
                 if let Some(error) = value.get("error") {
-                    return Err(format!("Inspector {} 调用失败: {}", method, error));
+                    return Err(format!(
+                        "Inspector 调用失败: method={}, id={}, error={}",
+                        method, id, error
+                    ));
                 }
                 return Ok(value.get("result").cloned().unwrap_or(Value::Null));
             }
@@ -543,10 +568,15 @@ impl CdpClient {
 
         tokio::time::timeout(Duration::from_secs(INSPECTOR_REQUEST_TIMEOUT_SECS), wait)
             .await
-            .map_err(|_| format!("Inspector {} 调用超时", method))?
+            .map_err(|_| {
+                format!(
+                    "Inspector WebSocket 超时: method={}, id={}, timeout={}s",
+                    method, id, INSPECTOR_REQUEST_TIMEOUT_SECS
+                )
+            })?
     }
 
-    async fn evaluate_object(&mut self, expression: &str) -> Result<String, String> {
+    async fn evaluate_object(&mut self, label: &str, expression: &str) -> Result<String, String> {
         let value = self
             .call(
                 "Runtime.evaluate",
@@ -556,14 +586,23 @@ impl CdpClient {
                     "replMode": true
                 }),
             )
-            .await?;
+            .await
+            .map_err(|err| format!("evaluate_object({}) 失败: {}", label, err))?;
+        if let Some(exception) = value.get("exceptionDetails") {
+            return Err(format!(
+                "evaluate_object({}) 异常: {}",
+                label,
+                format_cdp_exception(exception)
+            ));
+        }
         object_id_at(&value, &["result"])
             .map(ToString::to_string)
-            .ok_or_else(|| "Inspector evaluate 未返回 objectId".to_string())
+            .ok_or_else(|| format!("evaluate_object({}) 未返回 objectId", label))
     }
 
     async fn get_properties(
         &mut self,
+        label: &str,
         object_id: &str,
         own_properties: bool,
     ) -> Result<Value, String> {
@@ -576,25 +615,84 @@ impl CdpClient {
             }),
         )
         .await
+        .map_err(|err| format!("get_properties({}) 失败: {}", label, err))
     }
 
     async fn find_codex_mcp_instance(&mut self) -> Result<String, String> {
-        let activate_id = self.evaluate_object(ACTIVATE_FUNCTION_EXPRESSION).await?;
-        let activate_props = self.get_properties(&activate_id, false).await?;
+        let direct_scan_error = match self
+            .evaluate_object("direct req.cache scan", CODEX_INSTANCE_EXPRESSION)
+            .await
+        {
+            Ok(instance_id) => {
+                logger::log_info(
+                    "[Codex HotSwitch] 直接扫描 req.cache 命中 CodexMcpConnection 实例",
+                );
+                return Ok(instance_id);
+            }
+            Err(err) => {
+                logger::log_info(&format!(
+                    "[Codex HotSwitch] 直接扫描失败，回退 activate [[Scopes]]: {}",
+                    err
+                ));
+                err
+            }
+        };
+
+        let activate_id = self
+            .evaluate_object("activate export lookup", ACTIVATE_FUNCTION_EXPRESSION)
+            .await
+            .map_err(|err| format_lookup_error("activate 失败", &direct_scan_error, err))?;
+        let activate_props = self
+            .get_properties("activate function", &activate_id, false)
+            .await
+            .map_err(|err| format_lookup_error("activate 失败", &direct_scan_error, err))?;
         let scopes_id = internal_object_id(&activate_props, "[[Scopes]]")
-            .ok_or_else(|| "未找到 Codex 扩展 activate [[Scopes]]".to_string())?
+            .ok_or_else(|| {
+                format_lookup_error(
+                    "activate 失败",
+                    &direct_scan_error,
+                    "未找到 Codex 扩展 activate [[Scopes]]",
+                )
+            })?
             .to_string();
-        let scopes = self.get_properties(&scopes_id, true).await?;
+        let scopes = self
+            .get_properties("activate [[Scopes]]", &scopes_id, true)
+            .await
+            .map_err(|err| format_lookup_error("activate 失败", &direct_scan_error, err))?;
         let closure_scope_id = property_object_id(&scopes, "0")
-            .ok_or_else(|| "未找到 Codex 扩展闭包 scope".to_string())?
+            .ok_or_else(|| {
+                format_lookup_error(
+                    "activate 失败",
+                    &direct_scan_error,
+                    "未找到 Codex 扩展闭包 scope",
+                )
+            })?
             .to_string();
-        let closure_props = self.get_properties(&closure_scope_id, true).await?;
+        let closure_props = self
+            .get_properties("activate closure scope", &closure_scope_id, true)
+            .await
+            .map_err(|err| format_lookup_error("activate 失败", &direct_scan_error, err))?;
         let class_id = property_object_id(&closure_props, "I_")
-            .ok_or_else(|| "未找到 CodexMcpConnection 类".to_string())?
+            .ok_or_else(|| {
+                format_lookup_error(
+                    "activate 失败",
+                    &direct_scan_error,
+                    "未找到 CodexMcpConnection 类",
+                )
+            })?
             .to_string();
-        let class_props = self.get_properties(&class_id, false).await?;
+        let class_props = self
+            .get_properties("CodexMcpConnection class", &class_id, false)
+            .await
+            .map_err(|err| format_lookup_error("activate 失败", &direct_scan_error, err))?;
         let prototype_id = property_object_id(&class_props, "prototype")
-            .ok_or_else(|| "未找到 CodexMcpConnection prototype".to_string())?
+            .ok_or_else(|| {
+                format_lookup_error(
+                    "activate 失败",
+                    &direct_scan_error,
+                    "未找到 CodexMcpConnection prototype",
+                )
+            })?
             .to_string();
         let queried = self
             .call(
@@ -603,14 +701,42 @@ impl CdpClient {
                     "prototypeObjectId": prototype_id
                 }),
             )
-            .await?;
+            .await
+            .map_err(|err| format_lookup_error("queryObjects 失败", &direct_scan_error, err))?;
         let objects_id = object_id_at(&queried, &["objects"])
-            .ok_or_else(|| "Inspector queryObjects 未返回对象数组".to_string())?
+            .ok_or_else(|| {
+                format_lookup_error(
+                    "queryObjects 失败",
+                    &direct_scan_error,
+                    "Inspector queryObjects 未返回对象数组",
+                )
+            })?
             .to_string();
-        let objects = self.get_properties(&objects_id, true).await?;
-        find_indexed_object_id_by_class(&objects, "I_")
-            .ok_or_else(|| "当前 Antigravity 扩展宿主中未找到 CodexMcpConnection 实例".to_string())
+        let objects = self
+            .get_properties("queryObjects result", &objects_id, true)
+            .await
+            .map_err(|err| format_lookup_error("queryObjects 失败", &direct_scan_error, err))?;
+        let instance_id = find_indexed_object_id_by_class(&objects, "I_").ok_or_else(|| {
+            format_lookup_error(
+                "queryObjects 失败",
+                &direct_scan_error,
+                "当前 Antigravity 扩展宿主中未找到 CodexMcpConnection 实例",
+            )
+        })?;
+        logger::log_info(
+            "[Codex HotSwitch] activate [[Scopes]] + queryObjects 命中 CodexMcpConnection 实例",
+        );
+        Ok(instance_id)
     }
+}
+
+#[cfg(target_os = "windows")]
+fn format_lookup_error(
+    stage: &str,
+    direct_scan_error: &str,
+    detail: impl std::fmt::Display,
+) -> String {
+    format!("直接扫描失败: {}; {}: {}", direct_scan_error, stage, detail)
 }
 
 #[cfg(target_os = "windows")]
@@ -687,16 +813,174 @@ fn format_cdp_exception(exception: &Value) -> String {
 }
 
 #[cfg(target_os = "windows")]
-const ACTIVATE_FUNCTION_EXPRESSION: &str = r#"(() => {
-  const moduleBuiltin = process.getBuiltinModule('module');
-  const req = moduleBuiltin.createRequire('file:///D:/Antigravity/resources/app/out/main.js');
-  const key = Object.keys(req.cache).find((candidate) =>
-    candidate.includes('openai.chatgpt-') && candidate.endsWith('extension.js')
-  );
-  if (!key) {
-    throw new Error('Codex extension module is not loaded');
+const CODEX_INSTANCE_EXPRESSION: &str = r#"(() => {
+  const electronProcess = globalThis.vscode?.process ?? process;
+  const moduleBuiltin = electronProcess?.getBuiltinModule?.('module');
+  if (!moduleBuiltin) {
+    throw new Error('Electron built-in module API is unavailable');
   }
-  return req.cache[key].exports.activate;
+
+  const req = moduleBuiltin.createRequire('D:/Antigravity/resources/app/out/main.js');
+  const cache = req.cache || {};
+  const modulePriority = (key) => {
+    const lower = String(key).toLowerCase();
+    if (lower.includes('openai.chatgpt-') && lower.endsWith('extension.js')) {
+      return 3;
+    }
+    if (lower.includes('chatgpt') || lower.includes('codex')) {
+      return 2;
+    }
+    return lower.endsWith('extension.js') ? 1 : 0;
+  };
+  const moduleEntries = Object.entries(cache).filter(([, mod]) => Boolean(mod));
+  const modules = moduleEntries
+    .sort(([left], [right]) => modulePriority(right) - modulePriority(left))
+    .map(([, mod]) => mod);
+  if (modules.length === 0) {
+    throw new Error('Node module cache is empty');
+  }
+
+  const visitedValues = new WeakSet();
+  const visitedModules = new Set();
+  const valuesOf = (value) => {
+    try {
+      return Object.values(value);
+    } catch {
+      return [];
+    }
+  };
+
+  const isCandidate = (value) => {
+    if (!value || (typeof value !== 'object' && typeof value !== 'function')) {
+      return false;
+    }
+    if (typeof value.sendRequest !== 'function') {
+      return false;
+    }
+    const providers = value.providers;
+    if (!providers || typeof providers.get !== 'function') {
+      return false;
+    }
+    return value.initialized === true;
+  };
+
+  const walkValue = (value, depth) => {
+    if (!value || (typeof value !== 'object' && typeof value !== 'function')) {
+      return null;
+    }
+    if (visitedValues.has(value)) {
+      return null;
+    }
+    visitedValues.add(value);
+
+    if (isCandidate(value)) {
+      return value;
+    }
+
+    if (depth <= 0) {
+      return null;
+    }
+
+    for (const child of valuesOf(value)) {
+      const found = walkValue(child, depth - 1);
+      if (found) {
+        return found;
+      }
+    }
+
+    return null;
+  };
+
+  const walkModule = (mod, depth) => {
+    if (!mod || visitedModules.has(mod)) {
+      return null;
+    }
+    visitedModules.add(mod);
+
+    const exportedValues = [mod.exports, mod.exports?.default];
+    for (const exported of exportedValues) {
+      const found = walkValue(exported, depth);
+      if (found) {
+        return found;
+      }
+    }
+
+    if (depth <= 0) {
+      return null;
+    }
+
+    for (const child of mod.children || []) {
+      const found = walkModule(child, depth - 1);
+      if (found) {
+        return found;
+      }
+    }
+
+    return null;
+  };
+
+  let found = null;
+  for (const mod of modules) {
+    const candidate = walkModule(mod, 4);
+    if (candidate) {
+      found = candidate;
+      break;
+    }
+  }
+
+  if (!found) {
+    throw new Error(
+      `CodexMcpConnection instance is not loaded; moduleCacheSize=${modules.length}; prioritizedModules=${moduleEntries.filter(([key]) => modulePriority(key) > 0).length}`
+    );
+  }
+
+  return found;
+})()"#;
+
+#[cfg(target_os = "windows")]
+const ACTIVATE_FUNCTION_EXPRESSION: &str = r#"(() => {
+  const electronProcess = globalThis.vscode?.process ?? process;
+  const moduleBuiltin = electronProcess?.getBuiltinModule?.('module');
+  if (!moduleBuiltin) {
+    throw new Error('Electron built-in module API is unavailable');
+  }
+  const req = moduleBuiltin.createRequire('D:/Antigravity/resources/app/out/main.js');
+  const cache = req.cache || {};
+  const modulePriority = (key) => {
+    const lower = String(key).toLowerCase();
+    if (lower.includes('openai.chatgpt-') && lower.endsWith('extension.js')) {
+      return 3;
+    }
+    if (lower.includes('chatgpt') || lower.includes('codex')) {
+      return 2;
+    }
+    return lower.endsWith('extension.js') ? 1 : 0;
+  };
+  const moduleEntries = Object.entries(cache)
+    .filter(([, mod]) => Boolean(mod))
+    .sort(([left], [right]) => modulePriority(right) - modulePriority(left));
+  if (moduleEntries.length === 0) {
+    throw new Error('Node module cache is empty');
+  }
+  const exportCandidates = moduleEntries.flatMap(([key, mod]) => {
+    const priority = modulePriority(key);
+    const exports = cache[key]?.exports;
+    const candidates = [
+      exports?.activate,
+      exports?.default?.activate,
+    ];
+    if (priority > 0) {
+      candidates.push(exports?.default, exports);
+    }
+    return candidates;
+  });
+  const activate = exportCandidates.find((candidate) => typeof candidate === 'function');
+  if (!activate) {
+    throw new Error(
+      `Codex extension activate export is unavailable; moduleCacheSize=${moduleEntries.length}; prioritizedModules=${moduleEntries.filter(([key]) => modulePriority(key) > 0).length}`
+    );
+  }
+  return activate;
 })()"#;
 
 #[cfg(target_os = "windows")]
