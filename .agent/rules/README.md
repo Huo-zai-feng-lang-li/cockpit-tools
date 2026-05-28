@@ -8,6 +8,12 @@
 ## 代码交付
 - 修改前先确认现有架构和调用链，优先沿用已有模块、命名和配置结构。
 - 前端设置项要表达真实能力，禁止把“插件无感换号”和“桌面端重启换号”混成一个语义。
+- 新增或变更配置字段时，必须同步完成以下全链路对账后才能打 tag：
+  - `UserConfig`、`GeneralConfig`、`NetworkConfig` 的字段定义
+  - 所有 `UserConfig { ... }` / `GeneralConfig { ... }` / `NetworkConfig { ... }` 完整初始化点
+  - 前端设置映射、store、hook、service 与相关页面
+  - 双语 `CHANGELOG.md` / `CHANGELOG.zh-CN.md`
+  - 版本文件与 `npm run sync-version`
 - Codex 切号入口当前约定：
   - `codex_switch_targets_enabled` 是点击切号同步运行端的总开关。
   - `antigravity_dual_switch_no_restart_enabled` 控制反重力 IDE 插件无感换号。
@@ -50,6 +56,7 @@
   5. 提交代码到 `main`。
   6. 打 tag：`git tag vX.Y.Z`。
   7. 推送：`git push origin main` 和 `git push origin vX.Y.Z`。
+- GitHub Actions 日志里的 Node.js 20 弃用告警默认只作为维护提示，不单独阻断发布；只有 workflow 实际失败才需要修复后重新打 tag。
 - 如果远端 `main` 多出 Homebrew cask 自动 PR 合并提交，必须先 `git fetch origin main`，再 rebase 到 `origin/main`，然后移动 tag 到 rebased 后的新提交。
 - 禁止为了部署使用 `git push --force origin main`。只能在确认 tag 指向错误时对 tag 使用 `git push --force origin vX.Y.Z`。
 
