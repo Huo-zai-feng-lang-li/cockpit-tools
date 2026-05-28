@@ -389,6 +389,8 @@ pub fn save_network_config(
         openclaw_auth_overwrite_on_switch: current.openclaw_auth_overwrite_on_switch,
         codex_launch_on_switch: current.codex_launch_on_switch,
         codex_switch_targets_enabled: current.codex_switch_targets_enabled,
+        codex_antigravity_plugin_hot_switch_enabled: current
+            .codex_antigravity_plugin_hot_switch_enabled,
         antigravity_dual_switch_no_restart_enabled: current
             .antigravity_dual_switch_no_restart_enabled,
         auto_switch_enabled: current.auto_switch_enabled,

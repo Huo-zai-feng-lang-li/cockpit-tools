@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.59] - 2026-05-28
+### Fixed
+- **Release build config alignment**: Added the missing `UserConfig.codex_antigravity_plugin_hot_switch_enabled` field to the backend config model and persisted it through the network/general settings save path so the release workflow can compile and publish again.
+
 ## [0.20.58] - 2026-05-28
 ### Fixed
 - **Codex seamless hot switch reliability**: Expanded Antigravity Inspector discovery to cover `--remote-debugging-port` and `--inspect-port` host processes, removed the old `type=node` target gate, and stopped treating a failed plugin path as a successful switch.

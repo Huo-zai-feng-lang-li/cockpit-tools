@@ -202,6 +202,9 @@ pub struct UserConfig {
     /// 点击 Codex 切号时是否启用外部目标同步
     #[serde(default = "default_codex_switch_targets_enabled")]
     pub codex_switch_targets_enabled: bool,
+    /// Codex 反重力 IDE 插件无感换号
+    #[serde(default = "default_codex_antigravity_plugin_hot_switch_enabled")]
+    pub codex_antigravity_plugin_hot_switch_enabled: bool,
     /// Antigravity 切号是否启用“本地落盘 + 扩展无感”且不重启
     #[serde(default = "default_antigravity_dual_switch_no_restart_enabled")]
     pub antigravity_dual_switch_no_restart_enabled: bool,
@@ -505,6 +508,9 @@ fn default_codex_launch_on_switch() -> bool {
 fn default_codex_switch_targets_enabled() -> bool {
     true
 }
+fn default_codex_antigravity_plugin_hot_switch_enabled() -> bool {
+    false
+}
 fn default_antigravity_dual_switch_no_restart_enabled() -> bool {
     false
 }
@@ -675,6 +681,8 @@ impl Default for UserConfig {
             openclaw_auth_overwrite_on_switch: default_openclaw_auth_overwrite_on_switch(),
             codex_launch_on_switch: default_codex_launch_on_switch(),
             codex_switch_targets_enabled: default_codex_switch_targets_enabled(),
+            codex_antigravity_plugin_hot_switch_enabled:
+                default_codex_antigravity_plugin_hot_switch_enabled(),
             antigravity_dual_switch_no_restart_enabled:
                 default_antigravity_dual_switch_no_restart_enabled(),
             auto_switch_enabled: default_auto_switch_enabled(),
@@ -1361,5 +1369,18 @@ mod tests {
         let cfg: UserConfig =
             serde_json::from_value(serde_json::json!({})).expect("反序列化默认配置应成功");
         assert!(!cfg.openclaw_auth_overwrite_on_switch);
+    }
+
+    #[test]
+    fn codex_antigravity_plugin_hot_switch_default_is_disabled() {
+        let cfg = UserConfig::default();
+        assert!(!cfg.codex_antigravity_plugin_hot_switch_enabled);
+    }
+
+    #[test]
+    fn codex_antigravity_plugin_hot_switch_missing_field_falls_back_to_disabled() {
+        let cfg: UserConfig =
+            serde_json::from_value(serde_json::json!({})).expect("反序列化默认配置应成功");
+        assert!(!cfg.codex_antigravity_plugin_hot_switch_enabled);
     }
 }

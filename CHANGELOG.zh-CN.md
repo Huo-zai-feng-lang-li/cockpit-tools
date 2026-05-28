@@ -8,6 +8,10 @@
 
 ---
 
+## [0.20.59] - 2026-05-28
+### 修复
+- **发布构建配置对齐**: 在后端配置模型里补齐缺失的 `UserConfig.codex_antigravity_plugin_hot_switch_enabled` 字段，并同步到网络设置/通用设置保存路径，恢复 release workflow 的可编译发布链路。
+
 ## [0.20.58] - 2026-05-28
 ### 修复
 - **Codex 无感切号可靠性**: 扩大 Antigravity Inspector 探测范围，兼容 `--remote-debugging-port` 和 `--inspect-port` 启动的宿主进程，移除旧的 `type=node` 目标门槛，并且插件路径失败时不再假装切号成功。
