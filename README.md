@@ -391,6 +391,32 @@ npm run tauri dev
 npm run tauri build
 ```
 
+### 构建缓存清理
+
+Rust/Tauri 会在 `src-tauri/target` 生成编译缓存和中间产物。该目录不是源码，已由 `src-tauri/.gitignore` 忽略，不应提交到 Git。
+
+```bash
+# 只清 Rust 增量编译缓存，常规开发优先使用
+npm run clean:tauri:incremental
+
+# 清完整 Tauri 构建缓存，释放空间最多
+npm run clean:tauri
+
+# 同时清前端 dist 和 Tauri target
+npm run clean:all
+```
+
+清理 `src-tauri/target` 后，下一次 `npm run tauri dev` 或 `npm run tauri build` 会重新编译 Rust 依赖，首次启动会明显变慢；后续缓存重新生成后会恢复。
+
+### 本机维护建议
+
+- CPU 常见高占用：TypeScript 检查、Rust 构建、文件扫描、压缩解压、Codex/MCP 工具进程。
+- GPU 常见高占用：桌面渲染、浏览器渲染、视频会议、WebView、录屏/游戏助手。
+- Codex 桌面端 UI 会使用 GPU，工具调用、MCP、Node 和构建任务主要使用 CPU 与内存。
+- 保持 C 盘至少 15%-20% 空闲空间；重度使用 Codex、浏览器、IDE 和 Tauri 开发时，32GB 内存更稳。
+- 每月检查一次任务管理器，重点看 CPU、内存、磁盘、GPU 排名前 10 的进程。
+- 不要把 `target`、`dist`、日志、临时缓存提交进 Git。
+
 ---
 
 ## Star History

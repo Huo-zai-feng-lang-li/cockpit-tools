@@ -1,7 +1,7 @@
 {
   "name": "cockpit-tools",
   "private": true,
-  "version": "0.20.57",
+  "version": "0.20.58",
   "type": "module",
   "scripts": {
     "tauri:dev": "npm run tauri dev",
@@ -13,7 +13,11 @@
     "preview": "vite preview",
     "pretauri": "npm run typecheck",
     "tauri": "npm run sync-version && tauri",
-    "sync-version": "node scripts/sync-version.js"
+    "sync-version": "node scripts/sync-version.js",
+    "clean:dist": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "clean:tauri": "node -e \"require('node:fs').rmSync('src-tauri/target',{recursive:true,force:true})\"",
+    "clean:tauri:incremental": "node -e \"require('node:fs').rmSync('src-tauri/target/debug/incremental',{recursive:true,force:true})\"",
+    "clean:all": "npm run clean:dist && npm run clean:tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

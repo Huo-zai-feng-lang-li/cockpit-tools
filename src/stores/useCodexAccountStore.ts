@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   CodexAccount,
+  CodexHotSwitchResponse,
   CodexQuota,
   hasCodexAccountStructure,
   hasCodexAccountName,
@@ -72,11 +73,12 @@ interface CodexAccountState {
   fetchAccounts: () => Promise<void>;
   fetchCurrentAccount: () => Promise<void>;
   switchAccount: (accountId: string) => Promise<CodexAccount>;
-  hotSwitchAccount: (accountId: string) => Promise<CodexAccount>;
+  hotSwitchAccount: (accountId: string) => Promise<CodexHotSwitchResponse>;
   deleteAccount: (accountId: string) => Promise<void>;
   deleteAccounts: (accountIds: string[]) => Promise<void>;
   refreshQuota: (accountId: string) => Promise<CodexQuota>;
   refreshAllQuotas: () => Promise<number>;
+  refreshAllQuotasExceptCurrent: () => Promise<number>;
   hydrateAccountProfilesIfNeeded: (accountIds?: string[]) => Promise<void>;
   importFromLocal: () => Promise<CodexAccount>;
   importFromJson: (jsonContent: string) => Promise<CodexAccount[]>;
@@ -129,17 +131,13 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
         item.id === account.id ? { ...item, ...account } : item,
       );
       persistCodexAccountsCache(nextAccounts);
-      persistCodexCurrentAccountCache(account);
-      return { accounts: nextAccounts, currentAccount: account };
+      if (!response.hot_switch_error) {
+        persistCodexCurrentAccountCache(account);
+        return { accounts: nextAccounts, currentAccount: account };
+      }
+      return { accounts: nextAccounts };
     });
     await get().fetchAccounts();
-    set({ currentAccount: account });
-    persistCodexCurrentAccountCache(account);
-    await emitCurrentAccountChanged({
-      platformId: 'codex',
-      accountId: account.id,
-      reason: 'hot_switch',
-    });
 
     if (response.hot_switch_error) {
       console.warn('[Codex HotSwitch] CDP channel failed, showing degraded notification:', response.hot_switch_error);
@@ -152,9 +150,17 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
       } catch (err) {
         console.error('Failed to show message dialog:', err);
       }
+    } else {
+      set({ currentAccount: account });
+      persistCodexCurrentAccountCache(account);
+      await emitCurrentAccountChanged({
+        platformId: 'codex',
+        accountId: account.id,
+        reason: 'hot_switch',
+      });
     }
 
-    return account;
+    return response;
   },
 
   switchAccount: async (accountId: string) => {
@@ -227,6 +233,13 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
   
   refreshAllQuotas: async () => {
     const successCount = await codexService.refreshAllCodexQuotas();
+    await get().fetchAccounts();
+    await get().fetchCurrentAccount();
+    return successCount;
+  },
+
+  refreshAllQuotasExceptCurrent: async () => {
+    const successCount = await codexService.refreshAllCodexQuotasExceptCurrent();
     await get().fetchAccounts();
     await get().fetchCurrentAccount();
     return successCount;

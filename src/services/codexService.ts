@@ -86,6 +86,11 @@ export async function refreshAllCodexQuotas(): Promise<number> {
   return await invoke('refresh_all_codex_quotas');
 }
 
+/** 刷新所有非当前账号配额 */
+export async function refreshAllCodexQuotasExceptCurrent(): Promise<number> {
+  return await invoke('refresh_all_codex_quotas_except_current');
+}
+
 /** 新 OAuth 流程：开始登录 */
 export async function startCodexOAuthLogin(): Promise<CodexOAuthLoginStartResponse> {
   return await invoke('codex_oauth_login_start');

@@ -19,6 +19,7 @@ interface GeneralConfig {
   theme: string;
   auto_refresh_minutes: number;
   codex_auto_refresh_minutes: number;
+  codex_all_accounts_auto_refresh_minutes: number;
   ghcp_auto_refresh_minutes: number;
   windsurf_auto_refresh_minutes: number;
   kiro_auto_refresh_minutes: number;
@@ -67,8 +68,8 @@ export function useAutoRefresh() {
     (state) => state.fetchCurrentAccount,
   );
 
-  const refreshAllCodexQuotas = useCodexAccountStore(
-    (state) => state.refreshAllQuotas,
+  const refreshAllCodexQuotasExceptCurrent = useCodexAccountStore(
+    (state) => state.refreshAllQuotasExceptCurrent,
   );
   const fetchCodexAccounts = useCodexAccountStore(
     (state) => state.fetchAccounts,
@@ -282,11 +283,12 @@ export function useAutoRefresh() {
             console.log("[AutoRefresh] Antigravity 已禁用");
           }
 
-          if (config.codex_auto_refresh_minutes > 0) {
+          if (config.codex_all_accounts_auto_refresh_minutes > 0) {
             console.log(
-              `[AutoRefresh] Codex 已启用: 每 ${config.codex_auto_refresh_minutes} 分钟`,
+              `[AutoRefresh] Codex 所有账号已启用: 每 ${config.codex_all_accounts_auto_refresh_minutes} 分钟（不含当前账号）`,
             );
-            const codexMs = config.codex_auto_refresh_minutes * 60 * 1000;
+            const codexMs =
+              config.codex_all_accounts_auto_refresh_minutes * 60 * 1000;
 
             codexIntervalRef.current = window.setInterval(async () => {
               if (codexRefreshingRef.current) {
@@ -295,8 +297,8 @@ export function useAutoRefresh() {
               codexRefreshingRef.current = true;
 
               try {
-                console.log("[AutoRefresh] 触发 Codex 配额刷新...");
-                await refreshAllCodexQuotas();
+                console.log("[AutoRefresh] 触发 Codex 所有账号配额刷新...");
+                await refreshAllCodexQuotasExceptCurrent();
               } catch (e) {
                 console.error("[AutoRefresh] Codex 刷新失败:", e);
               } finally {
@@ -304,48 +306,35 @@ export function useAutoRefresh() {
               }
             }, codexMs);
           } else {
-            console.log("[AutoRefresh] Codex 已禁用");
+            console.log("[AutoRefresh] Codex 所有账号刷新已禁用");
           }
 
-          // Codex 自动切号或预警开启时，额外每 60 秒刷新当前账号（不影响原有 Codex 自动刷新规则）
-          if (
-            config.codex_auto_switch_enabled ||
-            config.codex_quota_alert_enabled
-          ) {
-            const reasons = [
-              config.codex_auto_switch_enabled ? "auto_switch" : null,
-              config.codex_quota_alert_enabled ? "quota_alert" : null,
-            ]
-              .filter(Boolean)
-              .join("+");
+          if (config.codex_auto_refresh_minutes > 0) {
             console.log(
-              `[AutoRefresh] Codex ${reasons} 已启用: 每 60 秒刷新当前账号`,
+              `[AutoRefresh] Codex 当前账号已启用: 每 ${config.codex_auto_refresh_minutes} 分钟`,
             );
-            codexCurrentRefreshIntervalRef.current = window.setInterval(
-              async () => {
-                if (codexCurrentRefreshingRef.current) {
-                  return;
-                }
-                codexCurrentRefreshingRef.current = true;
+            const codexCurrentMs = config.codex_auto_refresh_minutes * 60 * 1000;
 
-                try {
-                  await invoke("refresh_current_codex_quota");
-                  await fetchCodexAccounts();
-                  await fetchCurrentCodexAccount();
-                } catch (e) {
-                  console.error(
-                    "[AutoRefresh] Codex 自动切号/预警-当前账号刷新失败:",
-                    e,
-                  );
-                } finally {
-                  codexCurrentRefreshingRef.current = false;
-                }
-              },
-              60 * 1000,
-            );
+            codexCurrentRefreshIntervalRef.current = window.setInterval(async () => {
+              if (codexCurrentRefreshingRef.current) {
+                return;
+              }
+              codexCurrentRefreshingRef.current = true;
+
+              try {
+                console.log("[AutoRefresh] 触发 Codex 当前账号配额刷新...");
+                await invoke("refresh_current_codex_quota");
+                await fetchCodexAccounts();
+                await fetchCurrentCodexAccount();
+              } catch (e) {
+                console.error("[AutoRefresh] Codex 当前账号刷新失败:", e);
+              } finally {
+                codexCurrentRefreshingRef.current = false;
+              }
+            }, codexCurrentMs);
           } else {
             console.log(
-              "[AutoRefresh] Codex 自动切号/预警未启用，跳过 60 秒当前账号刷新",
+              "[AutoRefresh] Codex 当前账号刷新已禁用",
             );
           }
 
@@ -656,10 +645,10 @@ export function useAutoRefresh() {
               ? `antigravity=${config.auto_refresh_minutes}`
               : null,
             config.codex_auto_refresh_minutes > 0
-              ? `codex=${config.codex_auto_refresh_minutes}`
+              ? `codex_current=${config.codex_auto_refresh_minutes}`
               : null,
-            config.codex_auto_switch_enabled || config.codex_quota_alert_enabled
-              ? "codex_current=60s"
+            config.codex_all_accounts_auto_refresh_minutes > 0
+              ? `codex_all=${config.codex_all_accounts_auto_refresh_minutes}`
               : null,
             config.ghcp_auto_refresh_minutes > 0
               ? `ghcp=${config.ghcp_auto_refresh_minutes}`
@@ -721,7 +710,7 @@ export function useAutoRefresh() {
     fetchCurrentCodexAccount,
     fetchAccounts,
     fetchCurrentAccount,
-    refreshAllCodexQuotas,
+    refreshAllCodexQuotasExceptCurrent,
     refreshAllCursorTokens,
     refreshAllGeminiTokens,
     refreshAllGhcpTokens,

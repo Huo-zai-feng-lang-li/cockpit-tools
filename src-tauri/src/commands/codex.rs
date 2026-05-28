@@ -171,30 +171,31 @@ pub async fn hot_switch_codex_account(
         prepared.id, prepared.email
     ));
 
-    let (runtime_name, rate_limits, hot_switch_error, shortcut_injected) = match codex_runtime_bridge::hot_switch_account(&prepared).await {
-        Ok(runtime) => (runtime.runtime, runtime.rate_limits, None, None),
+    let (account, runtime_name, rate_limits, hot_switch_error, shortcut_injected) =
+        match codex_runtime_bridge::hot_switch_account(&prepared).await {
+        Ok(runtime) => {
+            let account = codex_account::activate_account_after_runtime_switch(&account_id)?;
+            if let Err(e) = crate::modules::codex_instance::update_default_settings(
+                Some(Some(account_id.clone())),
+                None,
+                Some(false),
+            ) {
+                logger::log_warn(&format!(
+                    "[Codex HotSwitch] 更新 Codex 默认实例绑定账号失败: {}",
+                    e
+                ));
+            }
+            (account, runtime.runtime, runtime.rate_limits, None, None)
+        }
         Err(err) => {
             logger::log_warn(&format!(
                 "[Codex HotSwitch] 运行时无感热切失败，已降级为重启生效模式: {}",
                 err
             ));
             let injected = codex_runtime_bridge::try_inject_shortcut_debugging_port();
-            ("none".to_string(), None, Some(err), Some(injected))
+            (prepared, "none".to_string(), None, Some(err), Some(injected))
         }
     };
-
-    let account = codex_account::activate_account_after_runtime_switch(&account_id)?;
-
-    if let Err(e) = crate::modules::codex_instance::update_default_settings(
-        Some(Some(account_id.clone())),
-        None,
-        Some(false),
-    ) {
-        logger::log_warn(&format!(
-            "[Codex HotSwitch] 更新 Codex 默认实例绑定账号失败: {}",
-            e
-        ));
-    }
 
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(CodexHotSwitchResponse {
@@ -225,11 +226,19 @@ async fn run_codex_post_refresh_checks(app: &AppHandle) {
             let target_id = target.id.clone();
             match hot_switch_codex_account(app.clone(), target_id.clone()).await {
                 Ok(response) => {
-                    logger::log_info(&format!(
-                        "[AutoSwitch][Codex] 自动热切完成: target_id={}, email={}, runtime={}",
-                        response.account.id, response.account.email, response.runtime
-                    ));
-                    switched = true;
+                    if response.hot_switch_error.is_none() {
+                        logger::log_info(&format!(
+                            "[AutoSwitch][Codex] 自动热切完成: target_id={}, email={}, runtime={}",
+                            response.account.id, response.account.email, response.runtime
+                        ));
+                        switched = true;
+                    } else {
+                        logger::log_warn(&format!(
+                            "[AutoSwitch][Codex] 自动热切降级失败: target_id={}, error={}",
+                            target_id,
+                            response.hot_switch_error.as_deref().unwrap_or("<unknown>")
+                        ));
+                    }
                 }
                 Err(e) => {
                     logger::log_warn(&format!(
@@ -331,9 +340,15 @@ pub async fn refresh_current_codex_quota(app: AppHandle) -> Result<(), String> {
 pub async fn refresh_all_codex_quotas(app: AppHandle) -> Result<i32, String> {
     let results = codex_quota::refresh_all_quotas().await?;
     let success_count = results.iter().filter(|(_, r)| r.is_ok()).count();
-    if success_count > 0 {
-        run_codex_post_refresh_checks(&app).await;
-    }
+    let _ = crate::modules::tray::update_tray_menu(&app);
+    Ok(success_count as i32)
+}
+
+/// 刷新所有非当前账号配额
+#[tauri::command]
+pub async fn refresh_all_codex_quotas_except_current(app: AppHandle) -> Result<i32, String> {
+    let results = codex_quota::refresh_all_quotas_except_current().await?;
+    let success_count = results.iter().filter(|(_, r)| r.is_ok()).count();
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(success_count as i32)
 }

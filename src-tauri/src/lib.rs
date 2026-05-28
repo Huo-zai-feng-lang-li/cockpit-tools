@@ -343,6 +343,7 @@ pub fn run() {
             commands::codex::import_codex_from_files,
             commands::codex::refresh_codex_quota,
             commands::codex::refresh_all_codex_quotas,
+            commands::codex::refresh_all_codex_quotas_except_current,
             commands::codex::refresh_current_codex_quota,
             commands::codex::codex_oauth_login_start,
             commands::codex::codex_oauth_login_completed,

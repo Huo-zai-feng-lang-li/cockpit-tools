@@ -19,6 +19,7 @@ interface GeneralConfig {
   ui_scale: number;
   auto_refresh_minutes: number;
   codex_auto_refresh_minutes: number;
+  codex_all_accounts_auto_refresh_minutes: number;
   ghcp_auto_refresh_minutes: number;
   windsurf_auto_refresh_minutes: number;
   kiro_auto_refresh_minutes: number;
@@ -54,6 +55,7 @@ interface GeneralConfig {
   openclaw_auth_overwrite_on_switch: boolean;
   codex_launch_on_switch: boolean;
   codex_switch_targets_enabled: boolean;
+  codex_antigravity_plugin_hot_switch_enabled: boolean;
   antigravity_dual_switch_no_restart_enabled: boolean;
   auto_switch_enabled: boolean;
   auto_switch_threshold: number;
@@ -161,6 +163,10 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const [quotaAlertThresholdEditing, setQuotaAlertThresholdEditing] =
     useState(false);
   const [customRefresh, setCustomRefresh] = useState("");
+  const [codexAllAccountsAutoRefresh, setCodexAllAccountsAutoRefresh] =
+    useState("3");
+  const [codexAllAccountsAutoRefreshCustomMode, setCodexAllAccountsAutoRefreshCustomMode] =
+    useState(false);
   const [customThreshold, setCustomThreshold] = useState("");
   const [quotaAlertCustomThreshold, setQuotaAlertCustomThreshold] =
     useState("");
@@ -187,7 +193,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     isCodexCodeReviewQuotaVisibleByDefault,
   );
   const modalRef = useRef<HTMLDivElement>(null);
-  const refreshPresets = ["-1", "2", "5", "10", "15"];
+  const refreshPresets = ["-1", "2", "3", "5", "10", "15"];
   const thresholdPresets = ["0", "20", "40", "60"];
   const velocityThresholdPresets = ["10", "15", "20", "30"];
 
@@ -249,6 +255,10 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       setThresholdEditing(false);
       setQuotaAlertThresholdEditing(false);
       setCustomRefresh("");
+      setCodexAllAccountsAutoRefresh(
+        String(cfg.codex_all_accounts_auto_refresh_minutes ?? 3),
+      );
+      setCodexAllAccountsAutoRefreshCustomMode(false);
       setCustomThreshold("");
       setQuotaAlertCustomThreshold("");
       setCodexAutoSwitchPrimaryCustomThreshold(
@@ -320,6 +330,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           uiScale: merged.ui_scale,
           autoRefreshMinutes: merged.auto_refresh_minutes,
           codexAutoRefreshMinutes: merged.codex_auto_refresh_minutes,
+          codexAllAccountsAutoRefreshMinutes:
+            merged.codex_all_accounts_auto_refresh_minutes,
           ghcpAutoRefreshMinutes: merged.ghcp_auto_refresh_minutes,
           windsurfAutoRefreshMinutes: merged.windsurf_auto_refresh_minutes,
           kiroAutoRefreshMinutes: merged.kiro_auto_refresh_minutes,
@@ -359,6 +371,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
             merged.openclaw_auth_overwrite_on_switch,
           codexLaunchOnSwitch: merged.codex_launch_on_switch,
           codexSwitchTargetsEnabled: merged.codex_switch_targets_enabled,
+          codexAntigravityPluginHotSwitchEnabled:
+            merged.codex_antigravity_plugin_hot_switch_enabled,
           antigravityDualSwitchNoRestartEnabled:
             merged.antigravity_dual_switch_no_restart_enabled,
           autoSwitchEnabled: merged.auto_switch_enabled,
@@ -646,7 +660,10 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case "antigravity":
         return t("quickSettings.refreshInterval", "配额自动刷新");
       case "codex":
-        return t("quickSettings.codexRefreshInterval", "配额自动刷新");
+        return t(
+          "quickSettings.codexCurrentRefreshInterval",
+          "当前账号配额自动刷新",
+        );
       case "github_copilot":
         return t("quickSettings.ghcpRefreshInterval", "配额自动刷新");
       case "windsurf":
@@ -855,6 +872,40 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     }
     setCustomRefresh("");
     setRefreshEditing(false);
+  };
+
+  const codexAllAccountsRefreshValue = config
+    ? Number(config.codex_all_accounts_auto_refresh_minutes)
+    : 3;
+  const codexAllAccountsRefreshIsPreset = refreshPresets.includes(
+    String(codexAllAccountsRefreshValue),
+  );
+  const showCodexAllAccountsRefreshInput =
+    codexAllAccountsAutoRefreshCustomMode;
+
+  const handleCodexAllAccountsRefreshSelectChange = (val: string) => {
+    if (val === "custom") {
+      setCodexAllAccountsAutoRefresh(
+        String(codexAllAccountsRefreshValue > 0 ? codexAllAccountsRefreshValue : 1),
+      );
+      setCodexAllAccountsAutoRefreshCustomMode(true);
+    } else {
+      setCodexAllAccountsAutoRefresh("");
+      setCodexAllAccountsAutoRefreshCustomMode(false);
+      saveConfig({ codex_all_accounts_auto_refresh_minutes: parseInt(val, 10) });
+    }
+  };
+
+  const handleCodexAllAccountsCustomRefreshApply = () => {
+    const parsed = parseInt(codexAllAccountsAutoRefresh, 10);
+    if (!isNaN(parsed) && parsed >= 1) {
+      saveConfig({ codex_all_accounts_auto_refresh_minutes: parsed });
+      setCodexAllAccountsAutoRefresh("");
+      setCodexAllAccountsAutoRefreshCustomMode(false);
+      return;
+    }
+    setCodexAllAccountsAutoRefresh("");
+    setCodexAllAccountsAutoRefreshCustomMode(false);
   };
 
   const handleThresholdSelectChange = (val: string) => {
@@ -1442,18 +1493,97 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <input
                         type="checkbox"
                         checked={
-                          config.antigravity_dual_switch_no_restart_enabled
+                          config.codex_antigravity_plugin_hot_switch_enabled
                         }
                         disabled={!config.codex_switch_targets_enabled}
                         onChange={(e) =>
                           saveConfig({
-                            antigravity_dual_switch_no_restart_enabled:
+                            codex_antigravity_plugin_hot_switch_enabled:
                               e.target.checked,
                           })
                         }
                       />
                       <span className="qs-switch-slider"></span>
                     </label>
+                  </div>
+                </div>
+
+                <div className="qs-row">
+                  <div className="qs-row-label">
+                    <RefreshCw size={15} />
+                    <span>
+                      {t(
+                        "settings.general.codexAllAccountsAutoRefresh",
+                        "所有账号配额自动刷新（不含当前账号）",
+                      )}
+                    </span>
+                  </div>
+                  <div className="qs-row-control">
+                    {showCodexAllAccountsRefreshInput ? (
+                      <div className="qs-inline-input">
+                        <input
+                          type="number"
+                          min={1}
+                          max={999}
+                          className="qs-select qs-select--input-mode qs-select--with-unit"
+                          value={codexAllAccountsAutoRefresh}
+                          placeholder={t(
+                            "quickSettings.inputMinutes",
+                            "输入分钟数",
+                          )}
+                          onChange={(e) =>
+                            setCodexAllAccountsAutoRefresh(
+                              e.target.value.replace(/[^\d]/g, ""),
+                            )
+                          }
+                          onBlur={handleCodexAllAccountsCustomRefreshApply}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleCodexAllAccountsCustomRefreshApply();
+                            }
+                          }}
+                        />
+                        <span className="qs-input-unit">
+                          {t("settings.general.minutes")}
+                        </span>
+                      </div>
+                    ) : (
+                      <select
+                        className="qs-select"
+                        value={String(codexAllAccountsRefreshValue)}
+                        onChange={(e) =>
+                          handleCodexAllAccountsRefreshSelectChange(
+                            e.target.value,
+                          )
+                        }
+                      >
+                        {!codexAllAccountsRefreshIsPreset && (
+                          <option value={String(codexAllAccountsRefreshValue)}>
+                            {codexAllAccountsRefreshValue}{" "}
+                            {t("settings.general.minutes")}
+                          </option>
+                        )}
+                        <option value="-1">
+                          {t("settings.general.autoRefreshDisabled")}
+                        </option>
+                        <option value="3">
+                          3 {t("settings.general.minutes")}
+                        </option>
+                        <option value="5">
+                          5 {t("settings.general.minutes")}
+                        </option>
+                        <option value="10">
+                          10 {t("settings.general.minutes")}
+                        </option>
+                        <option value="15">
+                          15 {t("settings.general.minutes")}
+                        </option>
+                        <option value="custom">
+                          {t("quickSettings.customInput", "自定义")}
+                        </option>
+                      </select>
+                    )}
                   </div>
                 </div>
 

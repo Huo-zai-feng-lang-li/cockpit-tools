@@ -53,15 +53,18 @@ pub async fn hot_switch_account(
     {
         let tokens = build_runtime_tokens(account)?;
 
-        match hot_switch_via_antigravity_inspector(account, &tokens).await {
+        let err = match hot_switch_via_antigravity_inspector(account, &tokens).await {
             Ok(result) => return Ok(result),
-            Err(err) => logger::log_warn(&format!(
-                "[Codex HotSwitch] Antigravity 插件 Inspector 热切不可用: {}",
+            Err(err) => {
+                logger::log_warn(&format!(
+                    "[Codex HotSwitch] Antigravity 插件 Inspector 热切不可用: {}",
+                    err
+                ));
                 err
-            )),
-        }
+            }
+        };
 
-        Err("未发现可热切的 Antigravity Codex 插件 Inspector 运行时".to_string())
+        Err(err)
     }
 }
 
@@ -233,15 +236,18 @@ async fn discover_antigravity_inspector_endpoints() -> Result<Vec<InspectorEndpo
 
     let mut endpoints = Vec::new();
     for port in ports {
-        match read_inspector_ws_url(&client, port.port).await {
-            Ok(Some(ws_url)) => endpoints.push(InspectorEndpoint {
-                pid: port.pid,
-                port: port.port,
-                ws_url,
-            }),
-            Ok(None) => {}
+        match read_inspector_ws_urls(&client, port.port).await {
+            Ok(ws_urls) => {
+                for ws_url in ws_urls {
+                    endpoints.push(InspectorEndpoint {
+                        pid: port.pid,
+                        port: port.port,
+                        ws_url,
+                    });
+                }
+            }
             Err(err) => logger::log_info(&format!(
-                "[Codex HotSwitch] 跳过非 Inspector 端口: pid={}, port={}, error={}",
+                "[Codex HotSwitch] 跳过不可用的 Inspector 端口: pid={}, port={}, error={}",
                 port.pid, port.port, err
             )),
         }
@@ -258,20 +264,34 @@ fn discover_antigravity_inspector_ports() -> Result<Vec<InspectorPort>, String> 
 $items = @()
 $processes = Get-CimInstance Win32_Process -Filter "Name='Antigravity.exe'" |
   Where-Object {
-    ($_.CommandLine -match 'node\.mojom\.NodeService' -and $_.CommandLine -match '--inspect-port') -or
-    ($_.CommandLine -match '--remote-debugging-port')
+    $_.CommandLine -match '--remote-debugging-port' -or
+    $_.CommandLine -match '--inspect-port' -or
+    $_.CommandLine -match 'node\.mojom\.NodeService'
   }
 foreach ($process in $processes) {
-  $connections = Get-NetTCPConnection -State Listen -OwningProcess $process.ProcessId -ErrorAction SilentlyContinue |
-    Where-Object { $_.LocalAddress -eq '127.0.0.1' -or $_.LocalAddress -eq '::1' }
+  $ports = @()
+  if ($process.CommandLine -match '--remote-debugging-port(?:=|\s+)(\d+)') {
+    $ports += [int]$matches[1]
+  }
+  if ($process.CommandLine -match '--inspect-port(?:=|\s+)(\d+)') {
+    $ports += [int]$matches[1]
+  }
+  $connections = Get-NetTCPConnection -State Listen -OwningProcess $process.ProcessId -ErrorAction SilentlyContinue
   foreach ($connection in $connections) {
-    $items += [pscustomobject]@{
-      pid = [int]$process.ProcessId
-      port = [int]$connection.LocalPort
+    if ($connection.LocalPort -gt 0 -and ($ports -notcontains [int]$connection.LocalPort)) {
+      $ports += [int]$connection.LocalPort
+    }
+  }
+  foreach ($port in $ports) {
+    if ($port -gt 0) {
+      $items += [pscustomobject]@{
+        pid = [int]$process.ProcessId
+        port = [int]$port
+      }
     }
   }
 }
-$items | ConvertTo-Json -Compress
+$items | Sort-Object pid, port -Unique | ConvertTo-Json -Compress
 "#;
 
     let command_text = format!(
@@ -311,30 +331,79 @@ $items | ConvertTo-Json -Compress
 }
 
 #[cfg(target_os = "windows")]
-async fn read_inspector_ws_url(
+async fn read_inspector_ws_urls(
     client: &reqwest::Client,
     port: u16,
-) -> Result<Option<String>, String> {
-    let url = format!("http://127.0.0.1:{}/json/list", port);
-    let response = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("请求 {} 失败: {}", url, e))?;
-    if !response.status().is_success() {
-        return Ok(None);
+) -> Result<Vec<String>, String> {
+    let mut ws_urls = Vec::new();
+    let json_paths = ["json/list", "json/version"];
+    let hosts = ["127.0.0.1", "localhost", "[::1]"];
+
+    for path in json_paths {
+        for host in hosts {
+            let url = format!("http://{}:{}/{}", host, port, path);
+            let response = match client.get(&url).send().await {
+                Ok(response) => response,
+                Err(err) => {
+                    logger::log_info(&format!(
+                        "[Codex HotSwitch] Inspector {} 请求失败: {}",
+                        url, err
+                    ));
+                    continue;
+                }
+            };
+            if !response.status().is_success() {
+                continue;
+            }
+            let value: Value = match response.json().await {
+                Ok(value) => value,
+                Err(err) => {
+                    logger::log_info(&format!(
+                        "[Codex HotSwitch] Inspector {} 响应解析失败: {}",
+                        url, err
+                    ));
+                    continue;
+                }
+            };
+
+            match path {
+                "json/list" => {
+                    let Some(entries) = value.as_array() else {
+                        continue;
+                    };
+                    for entry in entries {
+                        if let Some(ws_url) =
+                            entry.get("webSocketDebuggerUrl").and_then(Value::as_str)
+                        {
+                            let ws_url = ws_url.to_string();
+                            if !ws_urls.contains(&ws_url) {
+                                ws_urls.push(ws_url);
+                            }
+                        }
+                    }
+                }
+                "json/version" => {
+                    if let Some(ws_url) = value.get("webSocketDebuggerUrl").and_then(Value::as_str)
+                    {
+                        let ws_url = ws_url.to_string();
+                        if !ws_urls.contains(&ws_url) {
+                            ws_urls.push(ws_url);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        if !ws_urls.is_empty() {
+            break;
+        }
     }
-    let value: Value = response
-        .json()
-        .await
-        .map_err(|e| format!("解析 {} 响应失败: {}", url, e))?;
-    let entries = value
-        .as_array()
-        .ok_or_else(|| format!("{} 响应不是数组", url))?;
-    Ok(entries
-        .iter()
-        .find_map(|entry| entry.get("webSocketDebuggerUrl").and_then(Value::as_str))
-        .map(ToString::to_string))
+
+    if ws_urls.is_empty() {
+        Err(format!("端口 {} 未返回可用的 Inspector WebSocket", port))
+    } else {
+        Ok(ws_urls)
+    }
 }
 
 #[cfg(target_os = "windows")]

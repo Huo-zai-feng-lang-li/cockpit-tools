@@ -59,6 +59,7 @@ interface GeneralConfig {
   ui_scale: number;
   auto_refresh_minutes: number;
   codex_auto_refresh_minutes: number;
+  codex_all_accounts_auto_refresh_minutes: number;
   ghcp_auto_refresh_minutes: number;
   windsurf_auto_refresh_minutes: number;
   kiro_auto_refresh_minutes: number;
@@ -105,6 +106,7 @@ interface GeneralConfig {
   openclaw_auth_overwrite_on_switch: boolean;
   codex_launch_on_switch: boolean;
   codex_switch_targets_enabled: boolean;
+  codex_antigravity_plugin_hot_switch_enabled: boolean;
   antigravity_dual_switch_no_restart_enabled: boolean;
   auto_switch_enabled: boolean;
   auto_switch_threshold: number;
@@ -138,7 +140,7 @@ type AppPathTarget =
   | "trae"
   | "workbuddy"
   | "zed";
-const REFRESH_PRESET_VALUES = ["-1", "2", "5", "10", "15"];
+const REFRESH_PRESET_VALUES = ["-1", "2", "3", "5", "10", "15"];
 const THRESHOLD_PRESET_VALUES = ["0", "20", "40", "60"];
 const UI_SCALE_OPTIONS = ["0.9", "1", "1.1", "1.25", "1.5"] as const;
 const ANTIGRAVITY_SEAMLESS_SWITCH_UNLOCK_REQUIRED_TAPS = 10;
@@ -224,6 +226,8 @@ export function SettingsPage() {
   const [uiScale, setUiScale] = useState("1");
   const [autoRefresh, setAutoRefresh] = useState("5");
   const [codexAutoRefresh, setCodexAutoRefresh] = useState("10");
+  const [codexAllAccountsAutoRefresh, setCodexAllAccountsAutoRefresh] =
+    useState("3");
   const [ghcpAutoRefresh, setGhcpAutoRefresh] = useState("10");
   const [windsurfAutoRefresh, setWindsurfAutoRefresh] = useState("10");
   const [kiroAutoRefresh, setKiroAutoRefresh] = useState("10");
@@ -326,6 +330,10 @@ export function SettingsPage() {
   const [codexSwitchTargetsEnabled, setCodexSwitchTargetsEnabled] =
     useState(true);
   const [
+    codexAntigravityPluginHotSwitchEnabled,
+    setCodexAntigravityPluginHotSwitchEnabled,
+  ] = useState(false);
+  const [
     antigravityDualSwitchNoRestartEnabled,
     setAntigravityDualSwitchNoRestartEnabled,
   ] = useState(false);
@@ -353,6 +361,10 @@ export function SettingsPage() {
   const [autoRefreshCustomMode, setAutoRefreshCustomMode] = useState(false);
   const [codexAutoRefreshCustomMode, setCodexAutoRefreshCustomMode] =
     useState(false);
+  const [
+    codexAllAccountsAutoRefreshCustomMode,
+    setCodexAllAccountsAutoRefreshCustomMode,
+  ] = useState(false);
   const [ghcpAutoRefreshCustomMode, setGhcpAutoRefreshCustomMode] =
     useState(false);
   const [windsurfAutoRefreshCustomMode, setWindsurfAutoRefreshCustomMode] =
@@ -586,6 +598,7 @@ export function SettingsPage() {
     if (
       !autoRefresh.trim() ||
       !codexAutoRefresh.trim() ||
+      !codexAllAccountsAutoRefresh.trim() ||
       !ghcpAutoRefresh.trim() ||
       !windsurfAutoRefresh.trim() ||
       !kiroAutoRefresh.trim() ||
@@ -603,6 +616,8 @@ export function SettingsPage() {
 
     const autoRefreshNum = parseInt(autoRefresh, 10) || -1;
     const codexAutoRefreshNum = parseInt(codexAutoRefresh, 10) || -1;
+    const codexAllAccountsAutoRefreshNum =
+      parseInt(codexAllAccountsAutoRefresh, 10) || -1;
     const ghcpAutoRefreshNum = parseInt(ghcpAutoRefresh, 10) || -1;
     const windsurfAutoRefreshNum = parseInt(windsurfAutoRefresh, 10) || -1;
     const kiroAutoRefreshNum = parseInt(kiroAutoRefresh, 10) || -1;
@@ -683,6 +698,7 @@ export function SettingsPage() {
           uiScale: normalizedUiScale,
           autoRefreshMinutes: autoRefreshNum,
           codexAutoRefreshMinutes: codexAutoRefreshNum,
+          codexAllAccountsAutoRefreshMinutes: codexAllAccountsAutoRefreshNum,
           ghcpAutoRefreshMinutes: ghcpAutoRefreshNum,
           windsurfAutoRefreshMinutes: windsurfAutoRefreshNum,
           kiroAutoRefreshMinutes: kiroAutoRefreshNum,
@@ -717,6 +733,7 @@ export function SettingsPage() {
           openclawAuthOverwriteOnSwitch,
           codexLaunchOnSwitch,
           codexSwitchTargetsEnabled,
+          codexAntigravityPluginHotSwitchEnabled,
           antigravityDualSwitchNoRestartEnabled,
           autoSwitchEnabled,
           autoSwitchThreshold: Number.isNaN(parsedAutoSwitchThreshold)
@@ -804,6 +821,7 @@ export function SettingsPage() {
   }, [
     autoRefresh,
     codexAutoRefresh,
+    codexAllAccountsAutoRefresh,
     ghcpAutoRefresh,
     windsurfAutoRefresh,
     kiroAutoRefresh,
@@ -840,6 +858,7 @@ export function SettingsPage() {
     openclawAuthOverwriteOnSwitch,
     codexLaunchOnSwitch,
     codexSwitchTargetsEnabled,
+    codexAntigravityPluginHotSwitchEnabled,
     antigravityDualSwitchNoRestartEnabled,
     autoSwitchEnabled,
     autoSwitchThreshold,
@@ -1081,6 +1100,9 @@ export function SettingsPage() {
       setUiScale(String(config.ui_scale ?? 1));
       setAutoRefresh(String(config.auto_refresh_minutes));
       setCodexAutoRefresh(String(config.codex_auto_refresh_minutes ?? 10));
+      setCodexAllAccountsAutoRefresh(
+        String(config.codex_all_accounts_auto_refresh_minutes ?? 3),
+      );
       setGhcpAutoRefresh(String(config.ghcp_auto_refresh_minutes ?? 10));
       setWindsurfAutoRefresh(
         String(config.windsurf_auto_refresh_minutes ?? 10),
@@ -1157,6 +1179,9 @@ export function SettingsPage() {
       );
       setCodexLaunchOnSwitch(config.codex_launch_on_switch ?? true);
       setCodexSwitchTargetsEnabled(config.codex_switch_targets_enabled ?? true);
+      setCodexAntigravityPluginHotSwitchEnabled(
+        config.codex_antigravity_plugin_hot_switch_enabled ?? false,
+      );
       setAntigravityDualSwitchNoRestartEnabled(
         config.antigravity_dual_switch_no_restart_enabled ?? false,
       );
@@ -1192,6 +1217,7 @@ export function SettingsPage() {
       );
       setAutoRefreshCustomMode(false);
       setCodexAutoRefreshCustomMode(false);
+      setCodexAllAccountsAutoRefreshCustomMode(false);
       setGhcpAutoRefreshCustomMode(false);
       setWindsurfAutoRefreshCustomMode(false);
       setKiroAutoRefreshCustomMode(false);
@@ -1423,6 +1449,8 @@ export function SettingsPage() {
   const autoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(autoRefresh);
   const codexAutoRefreshIsPreset =
     REFRESH_PRESET_VALUES.includes(codexAutoRefresh);
+  const codexAllAccountsAutoRefreshIsPreset =
+    REFRESH_PRESET_VALUES.includes(codexAllAccountsAutoRefresh);
   const ghcpAutoRefreshIsPreset =
     REFRESH_PRESET_VALUES.includes(ghcpAutoRefresh);
   const windsurfAutoRefreshIsPreset =
@@ -2078,7 +2106,126 @@ export function SettingsPage() {
                               {t("settings.general.refreshIntervalLimited")}
                             </span>
                           </div>
-                        )}
+                      )}
+                    </div>
+                  </div>
+
+                    <div className="settings-row">
+                      <div className="row-label">
+                        <div className="row-title">
+                          {t(
+                            "settings.general.codexAllAccountsAutoRefresh",
+                            "Codex 所有账号自动刷新（不含当前账号）",
+                          )}
+                        </div>
+                        <div className="row-desc">
+                          {t(
+                            "settings.general.codexAllAccountsAutoRefreshDesc",
+                            "除当前账号外，其余账号的后台自动更新频率",
+                          )}
+                        </div>
+                      </div>
+                      <div className="row-control">
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "8px",
+                            alignItems: "center",
+                          }}
+                        >
+                          {codexAllAccountsAutoRefreshCustomMode ? (
+                            <div
+                              className="settings-inline-input"
+                              style={{ minWidth: "120px", width: "auto" }}
+                            >
+                              <input
+                                type="number"
+                                min={1}
+                                max={999}
+                                className="settings-select settings-select--input-mode settings-select--with-unit"
+                                value={codexAllAccountsAutoRefresh}
+                                placeholder={t(
+                                  "quickSettings.inputMinutes",
+                                  "输入分钟数",
+                                )}
+                                onChange={(e) =>
+                                  setCodexAllAccountsAutoRefresh(
+                                    sanitizeNumberInput(e.target.value),
+                                  )
+                                }
+                                onBlur={() => {
+                                  const normalized = normalizeNumberInput(
+                                    codexAllAccountsAutoRefresh,
+                                    1,
+                                    999,
+                                  );
+                                  setCodexAllAccountsAutoRefresh(normalized);
+                                  setCodexAllAccountsAutoRefreshCustomMode(false);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    const normalized = normalizeNumberInput(
+                                      codexAllAccountsAutoRefresh,
+                                      1,
+                                      999,
+                                    );
+                                    setCodexAllAccountsAutoRefresh(normalized);
+                                    setCodexAllAccountsAutoRefreshCustomMode(false);
+                                  }
+                                }}
+                              />
+                              <span className="settings-input-unit">
+                                {t("settings.general.minutes")}
+                              </span>
+                            </div>
+                          ) : (
+                            <select
+                              className="settings-select"
+                              style={{ minWidth: "120px", width: "auto" }}
+                              value={codexAllAccountsAutoRefresh}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === "custom") {
+                                  setCodexAllAccountsAutoRefreshCustomMode(true);
+                                  setCodexAllAccountsAutoRefresh(
+                                    codexAllAccountsAutoRefresh !== "-1"
+                                      ? codexAllAccountsAutoRefresh
+                                      : "3",
+                                  );
+                                  return;
+                                }
+                                setCodexAllAccountsAutoRefreshCustomMode(false);
+                                setCodexAllAccountsAutoRefresh(val);
+                              }}
+                            >
+                              {!codexAllAccountsAutoRefreshIsPreset && (
+                                <option value={codexAllAccountsAutoRefresh}>
+                                  {codexAllAccountsAutoRefresh}{" "}
+                                  {t("settings.general.minutes")}
+                                </option>
+                              )}
+                              <option value="-1">
+                                {t("settings.general.autoRefreshDisabled")}
+                              </option>
+                              <option value="3">
+                                3 {t("settings.general.minutes")}
+                              </option>
+                              <option value="5">
+                                5 {t("settings.general.minutes")}
+                              </option>
+                              <option value="10">
+                                10 {t("settings.general.minutes")}
+                              </option>
+                              <option value="15">
+                                15 {t("settings.general.minutes")}
+                              </option>
+                              <option value="custom">
+                                {t("settings.general.autoRefreshCustom")}
+                              </option>
+                            </select>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -2431,10 +2578,16 @@ export function SettingsPage() {
                     <div className="settings-row">
                       <div className="row-label">
                         <div className="row-title">
-                          {t("settings.general.codexAutoRefresh")}
+                          {t(
+                            "settings.general.codexCurrentAutoRefresh",
+                            "Codex 当前账号自动刷新",
+                          )}
                         </div>
                         <div className="row-desc">
-                          {t("settings.general.codexAutoRefreshDesc")}
+                          {t(
+                            "settings.general.codexCurrentAutoRefreshDesc",
+                            "当前账号的后台自动更新频率",
+                          )}
                         </div>
                       </div>
                       <div className="row-control">
@@ -2622,6 +2775,39 @@ export function SettingsPage() {
                             checked={codexLaunchOnSwitch}
                             onChange={(e) =>
                               setCodexLaunchOnSwitch(e.target.checked)
+                            }
+                          />
+                          <span className="slider"></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="settings-row">
+                      <div className="row-label">
+                        <div className="row-title">
+                          {t(
+                            "settings.general.codexAntigravityPluginHotSwitch",
+                            "反重力 IDE 插件无感换号",
+                          )}
+                        </div>
+                        <div className="row-desc">
+                          {t(
+                            "settings.general.codexAntigravityPluginHotSwitchDesc",
+                            "通过 Antigravity 插件运行时无感切换 Codex 账号",
+                          )}
+                        </div>
+                      </div>
+                      <div className="row-control">
+                        <label className="switch">
+                          <input
+                            type="checkbox"
+                            checked={
+                              codexAntigravityPluginHotSwitchEnabled
+                            }
+                            onChange={(e) =>
+                              setCodexAntigravityPluginHotSwitchEnabled(
+                                e.target.checked,
+                              )
                             }
                           />
                           <span className="slider"></span>

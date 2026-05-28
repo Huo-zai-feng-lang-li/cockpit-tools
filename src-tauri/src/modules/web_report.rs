@@ -95,7 +95,7 @@ fn build_service_refresh_policies(cfg: &super::config::UserConfig) -> Vec<Servic
         },
         ServiceRefreshPolicy {
             key: "codex",
-            interval_minutes: cfg.codex_auto_refresh_minutes,
+            interval_minutes: cfg.codex_all_accounts_auto_refresh_minutes,
         },
         ServiceRefreshPolicy {
             key: "ghcp",

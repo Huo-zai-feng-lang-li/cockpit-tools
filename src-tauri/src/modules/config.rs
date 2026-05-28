@@ -76,9 +76,12 @@ pub struct UserConfig {
     /// 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_auto_refresh")]
     pub auto_refresh_minutes: i32,
-    /// Codex 自动刷新间隔（分钟），-1 表示禁用
+    /// Codex 当前账号自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_codex_auto_refresh")]
     pub codex_auto_refresh_minutes: i32,
+    /// Codex 所有账号自动刷新间隔（分钟），-1 表示禁用
+    #[serde(default = "default_codex_all_accounts_auto_refresh")]
+    pub codex_all_accounts_auto_refresh_minutes: i32,
     /// Zed 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_zed_auto_refresh")]
     pub zed_auto_refresh_minutes: i32,
@@ -385,6 +388,9 @@ fn default_auto_refresh() -> i32 {
 fn default_codex_auto_refresh() -> i32 {
     10
 } // 默认 10 分钟
+fn default_codex_all_accounts_auto_refresh() -> i32 {
+    3
+} // 默认 3 分钟
 fn default_zed_auto_refresh() -> i32 {
     10
 }
@@ -627,6 +633,7 @@ impl Default for UserConfig {
             ui_scale: default_ui_scale(),
             auto_refresh_minutes: default_auto_refresh(),
             codex_auto_refresh_minutes: default_codex_auto_refresh(),
+            codex_all_accounts_auto_refresh_minutes: default_codex_all_accounts_auto_refresh(),
             zed_auto_refresh_minutes: default_zed_auto_refresh(),
             ghcp_auto_refresh_minutes: default_ghcp_auto_refresh(),
             windsurf_auto_refresh_minutes: default_windsurf_auto_refresh(),

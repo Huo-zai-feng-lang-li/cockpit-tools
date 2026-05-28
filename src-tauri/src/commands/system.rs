@@ -51,8 +51,10 @@ pub struct GeneralConfig {
     pub ui_scale: f64,
     /// 自动刷新间隔（分钟），-1 表示禁用
     pub auto_refresh_minutes: i32,
-    /// Codex 自动刷新间隔（分钟），-1 表示禁用
+    /// Codex 当前账号自动刷新间隔（分钟），-1 表示禁用
     pub codex_auto_refresh_minutes: i32,
+    /// Codex 所有账号自动刷新间隔（分钟），-1 表示禁用
+    pub codex_all_accounts_auto_refresh_minutes: i32,
     /// Zed 自动刷新间隔（分钟），-1 表示禁用
     pub zed_auto_refresh_minutes: i32,
     /// GitHub Copilot 自动刷新间隔（分钟），-1 表示禁用
@@ -129,6 +131,8 @@ pub struct GeneralConfig {
     pub codex_launch_on_switch: bool,
     /// 点击 Codex 切号时是否启用外部目标同步
     pub codex_switch_targets_enabled: bool,
+    /// Codex 反重力 IDE 插件无感换号
+    pub codex_antigravity_plugin_hot_switch_enabled: bool,
     /// Antigravity 切号是否启用“本地落盘 + 扩展无感”且不重启
     pub antigravity_dual_switch_no_restart_enabled: bool,
     /// 是否启用自动切号
@@ -452,6 +456,8 @@ pub fn get_general_config() -> Result<GeneralConfig, String> {
         ui_scale: user_config.ui_scale,
         auto_refresh_minutes: user_config.auto_refresh_minutes,
         codex_auto_refresh_minutes: user_config.codex_auto_refresh_minutes,
+        codex_all_accounts_auto_refresh_minutes: user_config
+            .codex_all_accounts_auto_refresh_minutes,
         zed_auto_refresh_minutes: user_config.zed_auto_refresh_minutes,
         ghcp_auto_refresh_minutes: user_config.ghcp_auto_refresh_minutes,
         windsurf_auto_refresh_minutes: user_config.windsurf_auto_refresh_minutes,
@@ -490,6 +496,8 @@ pub fn get_general_config() -> Result<GeneralConfig, String> {
         openclaw_auth_overwrite_on_switch: user_config.openclaw_auth_overwrite_on_switch,
         codex_launch_on_switch: user_config.codex_launch_on_switch,
         codex_switch_targets_enabled: user_config.codex_switch_targets_enabled,
+        codex_antigravity_plugin_hot_switch_enabled: user_config
+            .codex_antigravity_plugin_hot_switch_enabled,
         antigravity_dual_switch_no_restart_enabled: user_config
             .antigravity_dual_switch_no_restart_enabled,
         auto_switch_enabled: user_config.auto_switch_enabled,
@@ -531,10 +539,11 @@ pub fn get_general_config() -> Result<GeneralConfig, String> {
     };
 
     modules::logger::log_info(&format!(
-        "[StartupPerf][SystemCommand] get_general_config completed in {}ms: auto_refresh={}, codex={}, zed={}, ghcp={}, windsurf={}, kiro={}, cursor={}, gemini={}, codebuddy={}, codebuddy_cn={}, workbuddy={}, qoder={}, trae={}, auto_switch={}",
+        "[StartupPerf][SystemCommand] get_general_config completed in {}ms: auto_refresh={}, codex_current={}, codex_all={}, zed={}, ghcp={}, windsurf={}, kiro={}, cursor={}, gemini={}, codebuddy={}, codebuddy_cn={}, workbuddy={}, qoder={}, trae={}, auto_switch={}",
         started.elapsed().as_millis(),
         result.auto_refresh_minutes,
         result.codex_auto_refresh_minutes,
+        result.codex_all_accounts_auto_refresh_minutes,
         result.zed_auto_refresh_minutes,
         result.ghcp_auto_refresh_minutes,
         result.windsurf_auto_refresh_minutes,
@@ -561,6 +570,7 @@ pub fn save_general_config(
     ui_scale: Option<f64>,
     auto_refresh_minutes: i32,
     codex_auto_refresh_minutes: i32,
+    codex_all_accounts_auto_refresh_minutes: i32,
     zed_auto_refresh_minutes: Option<i32>,
     ghcp_auto_refresh_minutes: Option<i32>,
     windsurf_auto_refresh_minutes: Option<i32>,
@@ -599,6 +609,7 @@ pub fn save_general_config(
     openclaw_auth_overwrite_on_switch: Option<bool>,
     codex_launch_on_switch: bool,
     codex_switch_targets_enabled: Option<bool>,
+    codex_antigravity_plugin_hot_switch_enabled: Option<bool>,
     antigravity_dual_switch_no_restart_enabled: Option<bool>,
     auto_switch_enabled: Option<bool>,
     auto_switch_threshold: Option<i32>,
@@ -728,6 +739,7 @@ pub fn save_general_config(
         ui_scale: normalized_ui_scale,
         auto_refresh_minutes,
         codex_auto_refresh_minutes,
+        codex_all_accounts_auto_refresh_minutes,
         zed_auto_refresh_minutes: zed_auto_refresh_minutes
             .unwrap_or(current.zed_auto_refresh_minutes),
         ghcp_auto_refresh_minutes: ghcp_auto_refresh_minutes
@@ -781,6 +793,9 @@ pub fn save_general_config(
         codex_launch_on_switch,
         codex_switch_targets_enabled: codex_switch_targets_enabled
             .unwrap_or(current.codex_switch_targets_enabled),
+        codex_antigravity_plugin_hot_switch_enabled:
+            codex_antigravity_plugin_hot_switch_enabled
+                .unwrap_or(current.codex_antigravity_plugin_hot_switch_enabled),
         antigravity_dual_switch_no_restart_enabled: antigravity_dual_switch_no_restart_enabled
             .unwrap_or(current.antigravity_dual_switch_no_restart_enabled),
         auto_switch_enabled: auto_switch_enabled.unwrap_or(current.auto_switch_enabled),

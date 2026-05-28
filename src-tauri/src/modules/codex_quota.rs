@@ -411,14 +411,27 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<CodexQuota, Strin
 
 /// 刷新所有账号配额
 pub async fn refresh_all_quotas() -> Result<Vec<(String, Result<CodexQuota, String>)>, String> {
+    refresh_all_quotas_excluding(None).await
+}
+
+pub async fn refresh_all_quotas_excluding(
+    excluded_account_id: Option<&str>,
+) -> Result<Vec<(String, Result<CodexQuota, String>)>, String> {
     use futures::future::join_all;
     use std::sync::Arc;
     use tokio::sync::Semaphore;
 
     const MAX_CONCURRENT: usize = 5;
+    let excluded_account_id = excluded_account_id.map(str::to_string);
     let accounts: Vec<_> = codex_account::list_accounts()
         .into_iter()
-        .filter(|account| !account.is_api_key_auth())
+        .filter(|account| {
+            !account.is_api_key_auth()
+                && excluded_account_id
+                    .as_deref()
+                    .map(|excluded| excluded != account.id.as_str())
+                    .unwrap_or(true)
+        })
         .collect();
 
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT));
@@ -447,4 +460,10 @@ pub async fn refresh_all_quotas() -> Result<Vec<(String, Result<CodexQuota, Stri
     }
 
     Ok(results)
+}
+
+pub async fn refresh_all_quotas_except_current(
+) -> Result<Vec<(String, Result<CodexQuota, String>)>, String> {
+    let current_account_id = codex_account::get_current_account().map(|account| account.id);
+    refresh_all_quotas_excluding(current_account_id.as_deref()).await
 }

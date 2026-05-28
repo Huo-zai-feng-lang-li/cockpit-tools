@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.58] - 2026-05-28
+### Fixed
+- **Codex seamless hot switch reliability**: Expanded Antigravity Inspector discovery to cover `--remote-debugging-port` and `--inspect-port` host processes, removed the old `type=node` target gate, and stopped treating a failed plugin path as a successful switch.
+- **Codex quota refresh scheduling**: Split current-account refresh from all-account refresh so the current account follows its own interval while the all-account timer skips the active account by default.
+- **Switch-target setting isolation**: Separated the Codex plugin hot-switch toggle from Antigravity's no-restart dual-channel switch so the two settings persist independently.
+
 ## [0.20.57] - 2026-05-27
 ### Fixed
 - **Changelog Embedding Path**: Corrected the static inclusion path of bilingual changelog files in `update_checker.rs` to fix build-time path lookup errors.

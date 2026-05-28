@@ -97,6 +97,7 @@ const CODEX_TOKEN_BATCH_EXAMPLE = `[
 interface CodexSwitchTargetConfig {
   codex_switch_targets_enabled: boolean;
   codex_launch_on_switch: boolean;
+  codex_antigravity_plugin_hot_switch_enabled: boolean;
   antigravity_dual_switch_no_restart_enabled: boolean;
 }
 const CODEX_USAGE_URL = 'https://platform.openai.com/usage';
@@ -697,7 +698,7 @@ export function CodexAccountsPage() {
         return;
       }
 
-      const usePlugin = config.antigravity_dual_switch_no_restart_enabled;
+      const usePlugin = config.codex_antigravity_plugin_hot_switch_enabled;
       const useDesktop = config.codex_launch_on_switch;
       if (!usePlugin && !useDesktop) {
         setMessage({
@@ -707,28 +708,83 @@ export function CodexAccountsPage() {
         return;
       }
 
-      const account = usePlugin
-        ? await (async () => {
-            try {
-              await codexService.warmUpCodexRuntime();
-            } catch (error) {
-              console.info('[Codex HotSwitch] runtime warmup skipped:', error);
-            }
-            return hotSwitchAccount(accountId);
-          })()
-        : await switchAccount(accountId);
-
-      if (usePlugin && useDesktop) {
-        await switchAccount(accountId);
+      let pluginResponse: Awaited<ReturnType<typeof hotSwitchAccount>> | null =
+        null;
+      let pluginError: string | null = null;
+      if (usePlugin) {
+        try {
+          await codexService.warmUpCodexRuntime();
+        } catch (error) {
+          console.info('[Codex HotSwitch] runtime warmup skipped:', error);
+        }
+        try {
+          pluginResponse = await hotSwitchAccount(accountId);
+        } catch (error) {
+          pluginError = String(error);
+        }
       }
 
+      let desktopAccount: CodexAccount | null = null;
+      let desktopError: string | null = null;
+      if (useDesktop) {
+        try {
+          desktopAccount = await switchAccount(accountId);
+        } catch (error) {
+          desktopError = String(error);
+        }
+      }
+
+      const pluginRuntimeError = pluginResponse?.hot_switch_error ?? pluginError;
+      const pluginSucceeded = Boolean(pluginResponse && !pluginResponse.hot_switch_error);
+      const desktopSucceeded = Boolean(desktopAccount);
+      const successAccount = desktopAccount ?? pluginResponse?.account ?? null;
+
+      if (pluginSucceeded && desktopSucceeded && successAccount) {
+        setMessage({
+          text: t(
+            'codex.switchTargets.dualSuccess',
+            '无感热切与桌面端换号均成功: {{email}}',
+          ).replace('{{email}}', maskAccountText(successAccount.email)),
+        });
+        return;
+      }
+
+      if (desktopSucceeded && successAccount) {
+        setMessage({
+          text: t(
+            'codex.switchTargets.desktopFallbackSuccess',
+            '无感热切失败，已通过桌面端换号: {{email}}',
+          ).replace('{{email}}', maskAccountText(successAccount.email)),
+        });
+        return;
+      }
+
+      if (pluginSucceeded && successAccount) {
+        setMessage({
+          text: t(
+            useDesktop
+              ? 'codex.switchTargets.pluginPartialSuccess'
+              : 'codex.hotSwitch.success',
+            useDesktop
+              ? '无感热切成功，但桌面端换号失败: {{email}}'
+              : '无感热切成功: {{email}}',
+          ).replace('{{email}}', maskAccountText(successAccount.email)),
+        });
+        return;
+      }
+
+      const combinedError = [pluginRuntimeError, desktopError]
+        .filter(Boolean)
+        .join('；');
       setMessage({
         text: t(
-          usePlugin
-            ? 'codex.hotSwitch.success'
-            : 'codex.desktopSwitch.success',
-          usePlugin ? '无感热切成功: {{email}}' : '桌面端换号成功: {{email}}',
-        ).replace('{{email}}', maskAccountText(account.email)),
+          'codex.hotSwitch.failed',
+          '切号失败: {{error}}',
+        ).replace(
+          '{{error}}',
+          combinedError || t('common.failed', '切号失败'),
+        ),
+        tone: 'error',
       });
     } catch (e) {
       setMessage({

@@ -87,6 +87,7 @@ interface WakeupGeneralConfig {
   theme: string;
   auto_refresh_minutes: number;
   codex_auto_refresh_minutes: number;
+  codex_all_accounts_auto_refresh_minutes: number;
   close_behavior: string;
   opencode_app_path?: string;
   antigravity_app_path?: string;
@@ -1494,14 +1495,18 @@ export function CodexWakeupContent({ accounts, onRefreshAccounts }: CodexWakeupC
 
   const ensureCodexRefreshIntervalForQuotaReset = useCallback(async () => {
     const config = await invoke<WakeupGeneralConfig>('get_general_config');
-    if (config.codex_auto_refresh_minutes === QUOTA_RESET_MIN_REFRESH_MINUTES) {
+    if (
+      config.codex_all_accounts_auto_refresh_minutes ===
+      QUOTA_RESET_MIN_REFRESH_MINUTES
+    ) {
       return false;
     }
     await invoke('save_general_config', {
       language: config.language,
       theme: config.theme,
       autoRefreshMinutes: config.auto_refresh_minutes,
-      codexAutoRefreshMinutes: QUOTA_RESET_MIN_REFRESH_MINUTES,
+      codexAutoRefreshMinutes: config.codex_auto_refresh_minutes,
+      codexAllAccountsAutoRefreshMinutes: QUOTA_RESET_MIN_REFRESH_MINUTES,
       closeBehavior: config.close_behavior || 'ask',
       opencodeAppPath: config.opencode_app_path ?? '',
       antigravityAppPath: config.antigravity_app_path ?? '',
