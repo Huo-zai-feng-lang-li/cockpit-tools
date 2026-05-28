@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.60] - 2026-05-28
+### Fixed
+- **Release build config alignment**: Added the missing `codex_all_accounts_auto_refresh_minutes` field to the backend `UserConfig` initializer in `save_network_config`, which was still blocking the release workflow from compiling.
+
 ## [0.20.59] - 2026-05-28
 ### Fixed
 - **Release build config alignment**: Added the missing `UserConfig.codex_antigravity_plugin_hot_switch_enabled` field to the backend config model and persisted it through the network/general settings save path so the release workflow can compile and publish again.

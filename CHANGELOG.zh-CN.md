@@ -8,6 +8,10 @@
 
 ---
 
+## [0.20.60] - 2026-05-28
+### 修复
+- **发布构建配置对齐**: 在后端 `save_network_config` 的 `UserConfig` 初始化里补上缺失的 `codex_all_accounts_auto_refresh_minutes` 字段，恢复 release workflow 的编译链路。
+
 ## [0.20.59] - 2026-05-28
 ### 修复
 - **发布构建配置对齐**: 在后端配置模型里补齐缺失的 `UserConfig.codex_antigravity_plugin_hot_switch_enabled` 字段，并同步到网络设置/通用设置保存路径，恢复 release workflow 的可编译发布链路。

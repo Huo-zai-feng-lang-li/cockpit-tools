@@ -349,6 +349,8 @@ pub fn save_network_config(
         ui_scale: current.ui_scale,
         auto_refresh_minutes: current.auto_refresh_minutes,
         codex_auto_refresh_minutes: current.codex_auto_refresh_minutes,
+        codex_all_accounts_auto_refresh_minutes: current
+            .codex_all_accounts_auto_refresh_minutes,
         zed_auto_refresh_minutes: current.zed_auto_refresh_minutes,
         ghcp_auto_refresh_minutes: current.ghcp_auto_refresh_minutes,
         windsurf_auto_refresh_minutes: current.windsurf_auto_refresh_minutes,
