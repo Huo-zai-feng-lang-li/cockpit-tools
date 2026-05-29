@@ -1,6 +1,6 @@
 use crate::models::codex::CodexAccount;
 #[cfg(target_os = "windows")]
-use crate::modules::logger;
+use crate::modules::{logger, websocket};
 #[cfg(target_os = "windows")]
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -17,7 +17,17 @@ use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, Web
 #[cfg(target_os = "windows")]
 const INSPECTOR_HTTP_TIMEOUT_SECS: u64 = 2;
 #[cfg(target_os = "windows")]
+const PLUGIN_SWITCH_CONNECT_WAIT_MS: u64 = 1_500;
+#[cfg(target_os = "windows")]
+const PLUGIN_SWITCH_TIMEOUT_MS: u64 = 45_000;
+#[cfg(target_os = "windows")]
+const INSPECTOR_CONNECT_TIMEOUT_SECS: u64 = 2;
+#[cfg(target_os = "windows")]
 const INSPECTOR_REQUEST_TIMEOUT_SECS: u64 = 8;
+#[cfg(target_os = "windows")]
+const MAX_INSPECTOR_PORTS_TO_SCAN: usize = 12;
+#[cfg(target_os = "windows")]
+const MAX_INSPECTOR_ENDPOINTS_TO_TRY: usize = 3;
 #[cfg(target_os = "windows")]
 static LAST_INSPECTOR_ENDPOINT: Mutex<Option<InspectorEndpoint>> = Mutex::new(None);
 
@@ -51,6 +61,14 @@ pub async fn hot_switch_account(
 
     #[cfg(target_os = "windows")]
     {
+        match hot_switch_via_plugin_ws(account).await {
+            Ok(result) => return Ok(result),
+            Err(err) => logger::log_warn(&format!(
+                "[Codex HotSwitch] Antigravity Cockpit 插件 WS 热切不可用，准备降级 Inspector: {}",
+                err
+            )),
+        }
+
         let tokens = build_runtime_tokens(account)?;
 
         let err = match hot_switch_via_antigravity_inspector(account, &tokens).await {
@@ -76,14 +94,111 @@ pub async fn warm_up_runtime() -> Result<String, String> {
 
     #[cfg(target_os = "windows")]
     {
+        match warm_up_via_plugin_ws().await {
+            Ok(runtime) => return Ok(runtime),
+            Err(err) => logger::log_info(&format!(
+                "[Codex HotSwitch] Antigravity Cockpit 插件 WS 预热不可用，准备降级 Inspector: {}",
+                err
+            )),
+        }
+
         match warm_up_via_antigravity_inspector().await {
             Ok(runtime) => Ok(runtime),
             Err(err) => {
-                logger::log_warn(&format!("[Codex HotSwitch] 预热 Antigravity 插件运行时失败: {}", err));
+                logger::log_warn(&format!(
+                    "[Codex HotSwitch] 预热 Antigravity 插件运行时失败: {}",
+                    err
+                ));
                 Err(err)
             }
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+async fn hot_switch_via_plugin_ws(
+    account: &CodexAccount,
+) -> Result<CodexHotSwitchRuntimeResult, String> {
+    let client_count = websocket::wait_for_connected_clients(PLUGIN_SWITCH_CONNECT_WAIT_MS).await?;
+    let response = websocket::request_plugin_switch_account(
+        &account.email,
+        "seamless",
+        "manual",
+        "codex.hot_switch",
+        "codex_account_page_hot_switch",
+        PLUGIN_SWITCH_TIMEOUT_MS,
+    )
+    .await?;
+
+    validate_plugin_switch_response(&response, account)?;
+    logger::log_info(&format!(
+        "[Codex HotSwitch] Antigravity Cockpit 插件 WS 热切完成: email={}, mode={}, execution_id={}, clients={}",
+        account.email, response.effective_mode, response.execution_id, client_count
+    ));
+
+    Ok(CodexHotSwitchRuntimeResult {
+        runtime: format_plugin_ws_runtime_name(client_count, &response),
+        rate_limits: None,
+    })
+}
+
+#[cfg(target_os = "windows")]
+async fn warm_up_via_plugin_ws() -> Result<String, String> {
+    let client_count = websocket::wait_for_connected_clients(PLUGIN_SWITCH_CONNECT_WAIT_MS).await?;
+    Ok(format!(
+        "antigravity-cockpit-plugin-ws:clients={}",
+        client_count
+    ))
+}
+
+#[cfg(target_os = "windows")]
+fn validate_plugin_switch_response(
+    response: &websocket::PluginSwitchAccountResponsePayload,
+    account: &CodexAccount,
+) -> Result<(), String> {
+    if !response.success {
+        let message = response
+            .error_message
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or("插件未返回错误详情");
+        let code = response
+            .error_code
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or("unknown");
+        return Err(format!(
+            "Antigravity 插件无感切号失败: code={}, message={}",
+            code, message
+        ));
+    }
+
+    if !response.to_email.eq_ignore_ascii_case(&account.email) {
+        return Err(format!(
+            "Antigravity 插件回包目标账号不一致: expected={}, actual={}",
+            account.email, response.to_email
+        ));
+    }
+
+    if !response.effective_mode.eq_ignore_ascii_case("seamless") {
+        return Err(format!(
+            "Antigravity 插件未执行无感模式: expected=seamless, actual={}",
+            response.effective_mode
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn format_plugin_ws_runtime_name(
+    client_count: usize,
+    response: &websocket::PluginSwitchAccountResponsePayload,
+) -> String {
+    format!(
+        "antigravity-cockpit-plugin-ws:clients={},mode={},execution_id={}",
+        client_count, response.effective_mode, response.execution_id
+    )
 }
 
 #[cfg(target_os = "windows")]
@@ -95,10 +210,33 @@ struct InspectorPort {
 
 #[cfg(target_os = "windows")]
 #[derive(Debug, Clone)]
+struct InspectorPortCandidate {
+    pid: u32,
+    port: u16,
+    priority: u8,
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Debug, Clone)]
 struct InspectorEndpoint {
     pid: u32,
     port: u16,
     ws_url: String,
+    kind: InspectorTargetKind,
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InspectorTargetKind {
+    Node,
+    CodexRenderer,
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Debug, Clone)]
+struct InspectorWsTarget {
+    ws_url: String,
+    kind: InspectorTargetKind,
 }
 
 #[cfg(target_os = "windows")]
@@ -128,7 +266,7 @@ async fn hot_switch_via_antigravity_inspector(
     }
 
     let mut errors = Vec::new();
-    for endpoint in endpoints {
+    for endpoint in endpoints.into_iter().take(MAX_INSPECTOR_ENDPOINTS_TO_TRY) {
         match hot_switch_with_inspector_endpoint(&endpoint, account, tokens).await {
             Ok(rate_limits) => {
                 remember_inspector_endpoint(&endpoint);
@@ -165,7 +303,7 @@ async fn warm_up_via_antigravity_inspector() -> Result<String, String> {
     }
 
     let mut errors = Vec::new();
-    for endpoint in endpoints {
+    for endpoint in endpoints.into_iter().take(MAX_INSPECTOR_ENDPOINTS_TO_TRY) {
         match warm_up_with_inspector_endpoint(&endpoint).await {
             Ok(runtime) => {
                 remember_inspector_endpoint(&endpoint);
@@ -215,8 +353,10 @@ fn build_hot_switch_result(
 #[cfg(target_os = "windows")]
 fn format_runtime_name(endpoint: &InspectorEndpoint) -> String {
     format!(
-        "antigravity-codex-extension-inspector:pid={},port={}",
-        endpoint.pid, endpoint.port
+        "antigravity-codex-extension-inspector:pid={},port={},kind={}",
+        endpoint.pid,
+        endpoint.port,
+        endpoint.kind.label()
     )
 }
 
@@ -235,14 +375,15 @@ async fn discover_antigravity_inspector_endpoints() -> Result<Vec<InspectorEndpo
         .map_err(|e| format!("创建 Inspector HTTP 客户端失败: {}", e))?;
 
     let mut endpoints = Vec::new();
-    for port in ports {
+    for port in ports.into_iter().take(MAX_INSPECTOR_PORTS_TO_SCAN) {
         match read_inspector_ws_urls(&client, port.port).await {
-            Ok(ws_urls) => {
-                for ws_url in ws_urls {
+            Ok(ws_targets) => {
+                for target in ws_targets {
                     endpoints.push(InspectorEndpoint {
                         pid: port.pid,
                         port: port.port,
-                        ws_url,
+                        ws_url: target.ws_url,
+                        kind: target.kind,
                     });
                 }
             }
@@ -252,90 +393,248 @@ async fn discover_antigravity_inspector_endpoints() -> Result<Vec<InspectorEndpo
             )),
         }
     }
+    endpoints.sort_by_key(|endpoint| (endpoint.kind.priority(), endpoint.port));
     Ok(endpoints)
 }
 
 #[cfg(target_os = "windows")]
 fn discover_antigravity_inspector_ports() -> Result<Vec<InspectorPort>, String> {
-    use std::os::windows::process::CommandExt;
+    use std::collections::{HashMap, HashSet};
+    use std::process::Command;
+    use sysinfo::{ProcessRefreshKind, System, UpdateKind};
 
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let script = r#"
-$items = @()
-$processes = Get-CimInstance Win32_Process -Filter "Name='Antigravity.exe'" |
-  Where-Object {
-    $_.CommandLine -match '--remote-debugging-port' -or
-    $_.CommandLine -match '--inspect-port' -or
-    $_.CommandLine -match 'node\.mojom\.NodeService'
-  }
-foreach ($process in $processes) {
-  $ports = @()
-  if ($process.CommandLine -match '--remote-debugging-port(?:=|\s+)(\d+)') {
-    $ports += [int]$matches[1]
-  }
-  if ($process.CommandLine -match '--inspect-port(?:=|\s+)(\d+)') {
-    $ports += [int]$matches[1]
-  }
-  $connections = Get-NetTCPConnection -State Listen -OwningProcess $process.ProcessId -ErrorAction SilentlyContinue
-  foreach ($connection in $connections) {
-    if ($connection.LocalPort -gt 0 -and ($ports -notcontains [int]$connection.LocalPort)) {
-      $ports += [int]$connection.LocalPort
-    }
-  }
-  foreach ($port in $ports) {
-    if ($port -gt 0) {
-      $items += [pscustomobject]@{
-        pid = [int]$process.ProcessId
-        port = [int]$port
-      }
-    }
-  }
-}
-$items | Sort-Object pid, port -Unique | ConvertTo-Json -Compress
-"#;
-
-    let command_text = format!(
-        "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $OutputEncoding=[System.Text.Encoding]::UTF8; {}",
-        script
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing()
+            .with_exe(UpdateKind::OnlyIfNotSet)
+            .with_cmd(UpdateKind::OnlyIfNotSet),
     );
-    let output = std::process::Command::new("powershell")
-        .creation_flags(CREATE_NO_WINDOW)
-        .args(["-NoProfile", "-NonInteractive", "-Command", &command_text])
-        .output()
-        .map_err(|e| format!("执行 Antigravity Inspector 端口探测失败: {}", e))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
-            "Antigravity Inspector 端口探测失败: {}",
-            stderr.trim()
-        ));
+    let mut candidates = Vec::new();
+    let mut antigravity_pids = HashSet::new();
+    let mut node_service_pids = HashSet::new();
+
+    for (pid, process) in system.processes() {
+        if !is_antigravity_process(process) {
+            continue;
+        }
+
+        let pid = pid.as_u32();
+        let args: Vec<String> = process
+            .cmd()
+            .iter()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect();
+        let command_line = args.join(" ");
+        let lower_command_line = command_line.to_ascii_lowercase();
+        antigravity_pids.insert(pid);
+        if lower_command_line.contains("node.mojom.nodeservice") {
+            node_service_pids.insert(pid);
+        }
+
+        for port in collect_debug_flag_ports(&args, "--inspect-port") {
+            push_port_candidate(&mut candidates, pid, port, 0);
+        }
+        for port in collect_debug_flag_ports(&args, "--inspect-extensions") {
+            push_port_candidate(&mut candidates, pid, port, 0);
+        }
+        for port in collect_debug_flag_ports(&args, "--inspect-brk-extensions") {
+            push_port_candidate(&mut candidates, pid, port, 0);
+        }
+        for port in collect_debug_flag_ports(&args, "--remote-debugging-port") {
+            push_port_candidate(&mut candidates, pid, port, 5);
+        }
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let trimmed = stdout.trim();
-    if trimmed.is_empty() || trimmed == "null" {
-        return Ok(Vec::new());
+    // Extra pass: subprocesses of Antigravity (extension host / Node service).
+    // Antigravity child processes (e.g. node.exe with --inspect) own the true
+    // extension-host Inspector where require.cache is accessible.
+    for (pid, process) in system.processes() {
+        let p = pid.as_u32();
+        if antigravity_pids.contains(&p) {
+            continue;
+        }
+        let parent_pid = match process.parent() {
+            Some(parent) => parent.as_u32(),
+            None => continue,
+        };
+        if !antigravity_pids.contains(&parent_pid) && !node_service_pids.contains(&parent_pid) {
+            continue;
+        }
+        let args = cmd_args(process);
+        let lower_cmd = args.join(" ").to_ascii_lowercase();
+        if lower_cmd.contains("node.mojom.nodeservice") {
+            node_service_pids.insert(p);
+        }
+        push_ports_from_flag(&mut candidates, p, &args, "--inspect-port", 0);
+        push_ports_from_flag(&mut candidates, p, &args, "--inspect-extensions", 0);
+        push_ports_from_flag(&mut candidates, p, &args, "--inspect-brk-extensions", 0);
+        push_ports_from_flag(&mut candidates, p, &args, "--inspect", 0);
+        push_ports_from_flag(&mut candidates, p, &args, "--inspect-brk", 0);
+        push_ports_from_flag(&mut candidates, p, &args, "--remote-debugging-port", 5);
+        push_ports_from_flag(&mut candidates, p, &args, "--debug", 4);
     }
 
-    let value: Value = serde_json::from_str(trimmed)
-        .map_err(|e| format!("解析 Antigravity Inspector 端口列表失败: {}", e))?;
-    if value.is_array() {
-        serde_json::from_value(value)
-            .map_err(|e| format!("解析 Antigravity Inspector 端口数组失败: {}", e))
-    } else {
-        serde_json::from_value::<InspectorPort>(value)
-            .map(|item| vec![item])
-            .map_err(|e| format!("解析 Antigravity Inspector 端口对象失败: {}", e))
+    if !antigravity_pids.is_empty() {
+        let netstat_output = Command::new("netstat")
+            .args(["-ano", "-p", "TCP"])
+            .output()
+            .map_err(|e| format!("执行 netstat 探测 Antigravity 监听端口失败: {}", e))?;
+        if netstat_output.status.success() {
+            let stdout = String::from_utf8_lossy(&netstat_output.stdout);
+            for (pid, port) in parse_netstat_listeners(&stdout) {
+                if node_service_pids.contains(&pid) {
+                    push_port_candidate(&mut candidates, pid, port, 0);
+                } else if antigravity_pids.contains(&pid) {
+                    push_port_candidate(&mut candidates, pid, port, 5);
+                }
+            }
+        } else {
+            logger::log_warn(&format!(
+                "[Codex HotSwitch] netstat 探测 Antigravity 监听端口失败: {}",
+                String::from_utf8_lossy(&netstat_output.stderr).trim()
+            ));
+        }
     }
+
+    candidates.sort_by_key(|item| (item.priority, item.pid, item.port));
+    let mut unique = HashMap::<(u32, u16), u8>::new();
+    let mut ports = Vec::new();
+    for item in candidates {
+        if unique
+            .insert((item.pid, item.port), item.priority)
+            .is_none()
+        {
+            ports.push(InspectorPort {
+                pid: item.pid,
+                port: item.port,
+            });
+        }
+    }
+    Ok(ports)
+}
+
+#[cfg(target_os = "windows")]
+fn is_antigravity_process(process: &sysinfo::Process) -> bool {
+    let name = process.name().to_string_lossy().to_ascii_lowercase();
+    let exe_path = process
+        .exe()
+        .and_then(|path| path.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    name == "antigravity.exe" || exe_path.ends_with("\\antigravity.exe")
+}
+
+fn push_ports_from_flag(
+    candidates: &mut Vec<InspectorPortCandidate>,
+    pid: u32,
+    args: &[String],
+    flag: &str,
+    priority: u8,
+) {
+    for port in collect_debug_flag_ports(args, flag) {
+        push_port_candidate(candidates, pid, port, priority);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn cmd_args(process: &sysinfo::Process) -> Vec<String> {
+    process
+        .cmd()
+        .iter()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect()
+}
+
+fn collect_debug_flag_ports(args: &[String], flag: &str) -> Vec<u16> {
+    let mut ports = Vec::new();
+    for (index, arg) in args.iter().enumerate() {
+        if let Some(value) = arg.strip_prefix(&format!("{}=", flag)) {
+            if let Some(port) = parse_port_value(value) {
+                ports.push(port);
+            }
+            continue;
+        }
+        if arg == flag {
+            if let Some(next) = args
+                .get(index + 1)
+                .and_then(|value| parse_port_value(value))
+            {
+                ports.push(next);
+            }
+        }
+    }
+    ports
+}
+
+#[cfg(target_os = "windows")]
+fn parse_port_value(value: &str) -> Option<u16> {
+    let digits: String = value
+        .chars()
+        .rev()
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect();
+    digits.parse::<u16>().ok().filter(|port| *port > 0)
+}
+
+#[cfg(target_os = "windows")]
+fn push_port_candidate(
+    candidates: &mut Vec<InspectorPortCandidate>,
+    pid: u32,
+    port: u16,
+    priority: u8,
+) {
+    if port > 0 {
+        candidates.push(InspectorPortCandidate {
+            pid,
+            port,
+            priority,
+        });
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn parse_netstat_listeners(output: &str) -> Vec<(u32, u16)> {
+    output.lines().filter_map(parse_netstat_line).collect()
+}
+
+#[cfg(target_os = "windows")]
+fn parse_netstat_line(line: &str) -> Option<(u32, u16)> {
+    let columns: Vec<&str> = line.split_whitespace().collect();
+    if columns.len() < 5 || !columns[0].eq_ignore_ascii_case("TCP") {
+        return None;
+    }
+    if !columns
+        .iter()
+        .any(|column| column.eq_ignore_ascii_case("LISTENING"))
+    {
+        return None;
+    }
+    let pid = columns.last()?.parse::<u32>().ok()?;
+    let port = parse_port_from_address(columns.get(1)?)?;
+    Some((pid, port))
+}
+
+#[cfg(target_os = "windows")]
+fn parse_port_from_address(address: &str) -> Option<u16> {
+    address
+        .rsplit(':')
+        .next()
+        .and_then(|port| port.parse::<u16>().ok())
+        .filter(|port| *port > 0)
 }
 
 #[cfg(target_os = "windows")]
 async fn read_inspector_ws_urls(
     client: &reqwest::Client,
     port: u16,
-) -> Result<Vec<String>, String> {
-    let mut ws_urls = Vec::new();
+) -> Result<Vec<InspectorWsTarget>, String> {
+    let mut targets = Vec::new();
     let json_paths = ["json/list", "json/version"];
     let hosts = ["127.0.0.1", "localhost"];
 
@@ -372,38 +671,83 @@ async fn read_inspector_ws_urls(
                         continue;
                     };
                     for entry in entries {
+                        let Some(kind) = inspector_entry_kind(entry) else {
+                            continue;
+                        };
                         if let Some(ws_url) =
                             entry.get("webSocketDebuggerUrl").and_then(Value::as_str)
                         {
-                            let ws_url = normalize_inspector_ws_url(ws_url);
-                            if !ws_urls.contains(&ws_url) {
-                                ws_urls.push(ws_url);
-                            }
+                            push_ws_target(&mut targets, ws_url, kind);
                         }
                     }
                 }
                 "json/version" => {
+                    if !is_node_inspector_version(&value) {
+                        continue;
+                    }
                     if let Some(ws_url) = value.get("webSocketDebuggerUrl").and_then(Value::as_str)
                     {
-                        let ws_url = normalize_inspector_ws_url(ws_url);
-                        if !ws_urls.contains(&ws_url) {
-                            ws_urls.push(ws_url);
-                        }
+                        push_ws_target(&mut targets, ws_url, InspectorTargetKind::Node);
                     }
                 }
                 _ => {}
             }
         }
-        if !ws_urls.is_empty() {
+        if !targets.is_empty() {
             break;
         }
     }
 
-    if ws_urls.is_empty() {
+    if targets.is_empty() {
         Err(format!("端口 {} 未返回可用的 Inspector WebSocket", port))
     } else {
-        Ok(ws_urls)
+        targets.sort_by_key(|target| target.kind.priority());
+        Ok(targets)
     }
+}
+
+#[cfg(target_os = "windows")]
+fn push_ws_target(targets: &mut Vec<InspectorWsTarget>, ws_url: &str, kind: InspectorTargetKind) {
+    let ws_url = normalize_inspector_ws_url(ws_url);
+    if targets.iter().any(|target| target.ws_url == ws_url) {
+        return;
+    }
+    targets.push(InspectorWsTarget { ws_url, kind });
+}
+
+#[cfg(target_os = "windows")]
+fn inspector_entry_kind(entry: &Value) -> Option<InspectorTargetKind> {
+    let entry_type = entry.get("type").and_then(Value::as_str).unwrap_or("");
+    if entry_type.eq_ignore_ascii_case("node") {
+        return Some(InspectorTargetKind::Node);
+    }
+
+    let title = entry.get("title").and_then(Value::as_str).unwrap_or("");
+    let url = entry.get("url").and_then(Value::as_str).unwrap_or("");
+    let description = entry
+        .get("description")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let haystack = format!("{} {} {} {}", entry_type, title, url, description).to_ascii_lowercase();
+    let looks_like_codex_extension = haystack.contains("openai.chatgpt")
+        || haystack.contains("codexmcpconnection")
+        || (haystack.contains("chatgpt") && haystack.contains("extension"))
+        || (haystack.contains("codex") && haystack.contains("extension"));
+
+    if looks_like_codex_extension {
+        Some(InspectorTargetKind::CodexRenderer)
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn is_node_inspector_version(value: &Value) -> bool {
+    value
+        .get("Browser")
+        .and_then(Value::as_str)
+        .map(|browser| browser.to_ascii_lowercase().contains("node"))
+        .unwrap_or(false)
 }
 
 #[cfg(target_os = "windows")]
@@ -413,6 +757,23 @@ fn normalize_inspector_ws_url(ws_url: &str) -> String {
         .replace("wss://[::1]:", "wss://127.0.0.1:")
         .replace("ws://localhost:", "ws://127.0.0.1:")
         .replace("wss://localhost:", "wss://127.0.0.1:")
+}
+
+#[cfg(target_os = "windows")]
+impl InspectorTargetKind {
+    fn priority(self) -> u8 {
+        match self {
+            InspectorTargetKind::Node => 0,
+            InspectorTargetKind::CodexRenderer => 10,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            InspectorTargetKind::Node => "node",
+            InspectorTargetKind::CodexRenderer => "codex-renderer",
+        }
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -498,9 +859,18 @@ async fn warm_up_with_inspector_endpoint(endpoint: &InspectorEndpoint) -> Result
 #[cfg(target_os = "windows")]
 impl CdpClient {
     async fn connect(ws_url: &str) -> Result<Self, String> {
-        let (socket, _) = connect_async(ws_url)
-            .await
-            .map_err(|e| format!("连接 Antigravity Inspector WebSocket 失败: {}", e))?;
+        let (socket, _) = tokio::time::timeout(
+            Duration::from_secs(INSPECTOR_CONNECT_TIMEOUT_SECS),
+            connect_async(ws_url),
+        )
+        .await
+        .map_err(|_| {
+            format!(
+                "连接 Antigravity Inspector WebSocket 超时: timeout={}s",
+                INSPECTOR_CONNECT_TIMEOUT_SECS
+            )
+        })?
+        .map_err(|e| format!("连接 Antigravity Inspector WebSocket 失败: {}", e))?;
         Ok(Self { socket, next_id: 1 })
     }
 
@@ -631,26 +1001,52 @@ impl CdpClient {
             }
             Err(err) => {
                 logger::log_info(&format!(
-                    "[Codex HotSwitch] 直接扫描失败，回退 activate [[Scopes]]: {}",
+                    "[Codex HotSwitch] 直接扫描失败，回退 heap arrays: {}",
                     err
                 ));
                 err
             }
         };
 
+        let array_scan_error = match self.find_codex_mcp_instance_in_arrays().await {
+            Ok(Some(instance_id)) => {
+                logger::log_info("[Codex HotSwitch] heap arrays 扫描命中 CodexMcpConnection 实例");
+                return Ok(instance_id);
+            }
+            Ok(None) => {
+                let err = "heap arrays 未找到 CodexMcpConnection 实例".to_string();
+                logger::log_info(&format!(
+                    "[Codex HotSwitch] heap arrays 扫描失败，回退 activate [[Scopes]]: {}",
+                    err
+                ));
+                err
+            }
+            Err(err) => {
+                logger::log_info(&format!(
+                    "[Codex HotSwitch] heap arrays 扫描异常，回退 activate [[Scopes]]: {}",
+                    err
+                ));
+                err
+            }
+        };
+        let combined_scan_error = format!(
+            "{}; heap arrays 扫描失败: {}",
+            direct_scan_error, array_scan_error
+        );
+
         let activate_id = self
             .evaluate_object("activate export lookup", ACTIVATE_FUNCTION_EXPRESSION)
             .await
-            .map_err(|err| format_lookup_error("activate 失败", &direct_scan_error, err))?;
+            .map_err(|err| format_lookup_error("activate 失败", &combined_scan_error, err))?;
         let activate_props = self
             .get_properties("activate function", &activate_id, false)
             .await
-            .map_err(|err| format_lookup_error("activate 失败", &direct_scan_error, err))?;
+            .map_err(|err| format_lookup_error("activate 失败", &combined_scan_error, err))?;
         let scopes_id = internal_object_id(&activate_props, "[[Scopes]]")
             .ok_or_else(|| {
                 format_lookup_error(
                     "activate 失败",
-                    &direct_scan_error,
+                    &combined_scan_error,
                     "未找到 Codex 扩展 activate [[Scopes]]",
                 )
             })?
@@ -658,12 +1054,12 @@ impl CdpClient {
         let scopes = self
             .get_properties("activate [[Scopes]]", &scopes_id, true)
             .await
-            .map_err(|err| format_lookup_error("activate 失败", &direct_scan_error, err))?;
+            .map_err(|err| format_lookup_error("activate 失败", &combined_scan_error, err))?;
         let closure_scope_id = property_object_id(&scopes, "0")
             .ok_or_else(|| {
                 format_lookup_error(
                     "activate 失败",
-                    &direct_scan_error,
+                    &combined_scan_error,
                     "未找到 Codex 扩展闭包 scope",
                 )
             })?
@@ -671,29 +1067,61 @@ impl CdpClient {
         let closure_props = self
             .get_properties("activate closure scope", &closure_scope_id, true)
             .await
-            .map_err(|err| format_lookup_error("activate 失败", &direct_scan_error, err))?;
-        let class_id = property_object_id(&closure_props, "I_")
-            .ok_or_else(|| {
-                format_lookup_error(
-                    "activate 失败",
-                    &direct_scan_error,
-                    "未找到 CodexMcpConnection 类",
-                )
-            })?
-            .to_string();
-        let class_props = self
-            .get_properties("CodexMcpConnection class", &class_id, false)
+            .map_err(|err| format_lookup_error("activate 失败", &combined_scan_error, err))?;
+        let class_ids = codex_mcp_class_candidates(&closure_props);
+        if class_ids.is_empty() {
+            return Err(format_lookup_error(
+                "activate 失败",
+                &combined_scan_error,
+                "未找到 CodexMcpConnection 候选类",
+            ));
+        }
+
+        let mut errors = Vec::new();
+        let candidate_count = class_ids.len();
+        for class_id in class_ids.into_iter().take(80) {
+            match self.find_codex_mcp_instance_for_class(&class_id).await {
+                Ok(Some(instance_id)) => {
+                    logger::log_info(
+                        "[Codex HotSwitch] activate [[Scopes]] + queryObjects 命中 CodexMcpConnection 实例",
+                    );
+                    return Ok(instance_id);
+                }
+                Ok(None) => {}
+                Err(err) => errors.push(err),
+            }
+        }
+
+        let detail = if errors.is_empty() {
+            format!(
+                "当前 Antigravity 扩展宿主中未找到 CodexMcpConnection 实例，candidate_count={}",
+                candidate_count
+            )
+        } else {
+            format!(
+                "当前 Antigravity 扩展宿主中未找到 CodexMcpConnection 实例，candidate_count={}, errors={}",
+                candidate_count,
+                errors.into_iter().take(3).collect::<Vec<_>>().join(" | ")
+            )
+        };
+        Err(format_lookup_error(
+            "queryObjects 失败",
+            &combined_scan_error,
+            detail,
+        ))
+    }
+
+    async fn find_codex_mcp_instance_in_arrays(&mut self) -> Result<Option<String>, String> {
+        let array_id = self
+            .evaluate_object("Array constructor", "Array")
             .await
-            .map_err(|err| format_lookup_error("activate 失败", &direct_scan_error, err))?;
-        let prototype_id = property_object_id(&class_props, "prototype")
-            .ok_or_else(|| {
-                format_lookup_error(
-                    "activate 失败",
-                    &direct_scan_error,
-                    "未找到 CodexMcpConnection prototype",
-                )
-            })?
-            .to_string();
+            .map_err(|err| format!("获取 Array 构造函数失败: {}", err))?;
+        let array_props = self
+            .get_properties("Array constructor", &array_id, false)
+            .await
+            .map_err(|err| format!("读取 Array.prototype 失败: {}", err))?;
+        let prototype_id = property_object_id(&array_props, "prototype")
+            .ok_or_else(|| "Array.prototype 缺少 objectId".to_string())?;
         let queried = self
             .call(
                 "Runtime.queryObjects",
@@ -702,31 +1130,87 @@ impl CdpClient {
                 }),
             )
             .await
-            .map_err(|err| format_lookup_error("queryObjects 失败", &direct_scan_error, err))?;
+            .map_err(|err| format!("queryObjects(Array.prototype) 失败: {}", err))?;
+        let arrays_id = object_id_at(&queried, &["objects"])
+            .ok_or_else(|| "Inspector queryObjects(Array) 未返回对象数组".to_string())?
+            .to_string();
+        let response = self
+            .call(
+                "Runtime.callFunctionOn",
+                json!({
+                    "objectId": arrays_id,
+                    "functionDeclaration": FIND_CODEX_INSTANCE_IN_ARRAYS_FUNCTION,
+                    "returnByValue": false
+                }),
+            )
+            .await
+            .map_err(|err| format!("扫描 heap arrays 失败: {}", err))?;
+        if let Some(exception) = response.get("exceptionDetails") {
+            return Err(format!(
+                "扫描 heap arrays 异常: {}",
+                format_cdp_exception(exception)
+            ));
+        }
+        let Some(result) = response.get("result") else {
+            return Ok(None);
+        };
+        if result.get("subtype").and_then(Value::as_str) == Some("null")
+            || result.get("type").and_then(Value::as_str) == Some("undefined")
+        {
+            return Ok(None);
+        }
+        Ok(object_id_at(&response, &["result"]).map(ToString::to_string))
+    }
+
+    async fn find_codex_mcp_instance_for_class(
+        &mut self,
+        class_id: &str,
+    ) -> Result<Option<String>, String> {
+        let class_props = self
+            .get_properties("CodexMcpConnection class candidate", class_id, false)
+            .await?;
+        let Some(prototype_id) = property_object_id(&class_props, "prototype") else {
+            return Ok(None);
+        };
+        let queried = self
+            .call(
+                "Runtime.queryObjects",
+                json!({
+                    "prototypeObjectId": prototype_id
+                }),
+            )
+            .await?;
         let objects_id = object_id_at(&queried, &["objects"])
-            .ok_or_else(|| {
-                format_lookup_error(
-                    "queryObjects 失败",
-                    &direct_scan_error,
-                    "Inspector queryObjects 未返回对象数组",
-                )
-            })?
+            .ok_or_else(|| "Inspector queryObjects 未返回对象数组".to_string())?
             .to_string();
         let objects = self
             .get_properties("queryObjects result", &objects_id, true)
-            .await
-            .map_err(|err| format_lookup_error("queryObjects 失败", &direct_scan_error, err))?;
-        let instance_id = find_indexed_object_id_by_class(&objects, "I_").ok_or_else(|| {
-            format_lookup_error(
-                "queryObjects 失败",
-                &direct_scan_error,
-                "当前 Antigravity 扩展宿主中未找到 CodexMcpConnection 实例",
+            .await?;
+
+        for object_id in indexed_object_ids(&objects).into_iter().take(20) {
+            if self.is_codex_mcp_instance(&object_id).await? {
+                return Ok(Some(object_id));
+            }
+        }
+        Ok(None)
+    }
+
+    async fn is_codex_mcp_instance(&mut self, object_id: &str) -> Result<bool, String> {
+        let response = self
+            .call(
+                "Runtime.callFunctionOn",
+                json!({
+                    "objectId": object_id,
+                    "functionDeclaration": "function() { return Boolean(this && typeof this.sendRequest === 'function' && this.providers && typeof this.providers.get === 'function'); }",
+                    "returnByValue": true
+                }),
             )
-        })?;
-        logger::log_info(
-            "[Codex HotSwitch] activate [[Scopes]] + queryObjects 命中 CodexMcpConnection 实例",
-        );
-        Ok(instance_id)
+            .await?;
+        Ok(response
+            .get("result")
+            .and_then(|item| item.get("value"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false))
     }
 }
 
@@ -773,12 +1257,12 @@ fn object_id_at<'a>(value: &'a Value, path: &[&str]) -> Option<&'a str> {
 }
 
 #[cfg(target_os = "windows")]
-fn find_indexed_object_id_by_class(properties: &Value, class_name: &str) -> Option<String> {
+fn indexed_object_ids(properties: &Value) -> Vec<String> {
     let mut entries = properties
-        .get("result")?
-        .as_array()?
-        .iter()
-        .collect::<Vec<_>>();
+        .get("result")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().collect::<Vec<_>>())
+        .unwrap_or_default();
     entries.sort_by_key(|item| {
         item.get("name")
             .and_then(Value::as_str)
@@ -786,19 +1270,37 @@ fn find_indexed_object_id_by_class(properties: &Value, class_name: &str) -> Opti
             .unwrap_or(usize::MAX)
     });
 
-    entries.into_iter().find_map(|item| {
-        let name = item.get("name").and_then(Value::as_str)?;
-        name.parse::<usize>().ok()?;
-        let value = item.get("value")?;
-        if value.get("className").and_then(Value::as_str) == Some(class_name) {
-            value
-                .get("objectId")
-                .and_then(Value::as_str)
+    entries
+        .into_iter()
+        .filter_map(|item| {
+            let name = item.get("name").and_then(Value::as_str)?;
+            name.parse::<usize>().ok()?;
+            item.get("value")?
+                .get("objectId")?
+                .as_str()
                 .map(ToString::to_string)
-        } else {
-            None
-        }
-    })
+        })
+        .collect()
+}
+
+#[cfg(target_os = "windows")]
+fn codex_mcp_class_candidates(properties: &Value) -> Vec<String> {
+    properties
+        .get("result")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let value = item.get("value")?;
+                    if value.get("type").and_then(Value::as_str) != Some("function") {
+                        return None;
+                    }
+                    value.get("objectId")?.as_str().map(ToString::to_string)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(target_os = "windows")]
@@ -814,174 +1316,236 @@ fn format_cdp_exception(exception: &Value) -> String {
 
 #[cfg(target_os = "windows")]
 const CODEX_INSTANCE_EXPRESSION: &str = r#"(() => {
-  const electronProcess = globalThis.vscode?.process ?? process;
-  const moduleBuiltin = electronProcess?.getBuiltinModule?.('module');
-  if (!moduleBuiltin) {
-    throw new Error('Electron built-in module API is unavailable');
-  }
-
-  const req = moduleBuiltin.createRequire('D:/Antigravity/resources/app/out/main.js');
-  const cache = req.cache || {};
-  const modulePriority = (key) => {
-    const lower = String(key).toLowerCase();
-    if (lower.includes('openai.chatgpt-') && lower.endsWith('extension.js')) {
-      return 3;
+  const findModuleBuiltin = () => {
+    const p = globalThis.vscode?.process ?? globalThis.process;
+    // Strategy 1: Electron getBuiltinModule (works in extension host context)
+    if (p?.getBuiltinModule) {
+      const m = p.getBuiltinModule('module');
+      if (m?.createRequire) return { module: m, source: 'getBuiltinModule' };
     }
-    if (lower.includes('chatgpt') || lower.includes('codex')) {
-      return 2;
-    }
-    return lower.endsWith('extension.js') ? 1 : 0;
-  };
-  const moduleEntries = Object.entries(cache).filter(([, mod]) => Boolean(mod));
-  const modules = moduleEntries
-    .sort(([left], [right]) => modulePriority(right) - modulePriority(left))
-    .map(([, mod]) => mod);
-  if (modules.length === 0) {
-    throw new Error('Node module cache is empty');
-  }
-
-  const visitedValues = new WeakSet();
-  const visitedModules = new Set();
-  const valuesOf = (value) => {
+    // Strategy 2: require in global scope (Node.js / Electron context)
     try {
-      return Object.values(value);
-    } catch {
-      return [];
-    }
-  };
-
-  const isCandidate = (value) => {
-    if (!value || (typeof value !== 'object' && typeof value !== 'function')) {
-      return false;
-    }
-    if (typeof value.sendRequest !== 'function') {
-      return false;
-    }
-    const providers = value.providers;
-    if (!providers || typeof providers.get !== 'function') {
-      return false;
-    }
-    return value.initialized === true;
-  };
-
-  const walkValue = (value, depth) => {
-    if (!value || (typeof value !== 'object' && typeof value !== 'function')) {
-      return null;
-    }
-    if (visitedValues.has(value)) {
-      return null;
-    }
-    visitedValues.add(value);
-
-    if (isCandidate(value)) {
-      return value;
-    }
-
-    if (depth <= 0) {
-      return null;
-    }
-
-    for (const child of valuesOf(value)) {
-      const found = walkValue(child, depth - 1);
-      if (found) {
-        return found;
+      const r = typeof require !== 'undefined' ? require : (globalThis.require ?? false);
+      if (r && typeof r.resolve === 'function' && r.cache) {
+        return { module: r, source: 'require' };
       }
-    }
-
+    } catch {}
+    // Strategy 3: process.mainModule.require (deprecated Electron, sometimes works)
+    try {
+      if (p?.mainModule?.require && typeof p.mainModule.require.resolve === 'function') {
+        return { module: p.mainModule.require, source: 'mainModule' };
+      }
+    } catch {}
     return null;
   };
 
-  const walkModule = (mod, depth) => {
-    if (!mod || visitedModules.has(mod)) {
-      return null;
-    }
-    visitedModules.add(mod);
-
-    const exportedValues = [mod.exports, mod.exports?.default];
-    for (const exported of exportedValues) {
-      const found = walkValue(exported, depth);
-      if (found) {
-        return found;
+  const builtin = findModuleBuiltin();
+  if (builtin) {
+    // Build require.cache walk from the acquired module API
+    const createRequireFromModule = (moduleApi) => {
+      if (moduleApi?.cache) return moduleApi;
+      const anchors = [
+        'D:/Antigravity/resources/app/out/vs/workbench/api/node/extensionHostProcess.js',
+        'D:/Antigravity/resources/app/out/main.js',
+        'file:///d:/Antigravity/resources/app/out/vs/workbench/api/node/extensionHostProcess.js'
+      ];
+      for (const anchor of anchors) {
+        try {
+          const req = moduleApi?.createRequire?.(anchor);
+          if (req?.cache) return req;
+        } catch {}
       }
-    }
-
-    if (depth <= 0) {
       return null;
+    };
+    const req = builtin.source === 'require' ? builtin.module : createRequireFromModule(builtin.module);
+    if (!req?.cache) throw new Error('Node require cache is unavailable');
+    const cache = req.cache || {};
+    const modulePriority = (key) => {
+      const lower = String(key).toLowerCase();
+      if (lower.includes('openai.chatgpt-') && lower.endsWith('extension.js')) return 3;
+      if (lower.includes('chatgpt') || lower.includes('codex')) return 2;
+      return lower.endsWith('extension.js') ? 1 : 0;
+    };
+    const moduleEntries = Object.entries(cache).filter(([, mod]) => Boolean(mod));
+    const modules = moduleEntries
+      .sort(([left], [right]) => modulePriority(right) - modulePriority(left))
+      .map(([, mod]) => mod);
+    if (modules.length > 0) {
+      const visitedValues = new WeakSet();
+      const visitedModules = new Set();
+      const valuesOf = (value) => { try { return Object.values(value); } catch { return []; } };
+      const isCandidate = (value) => {
+        if (!value || (typeof value !== 'object' && typeof value !== 'function')) return false;
+        if (typeof value.sendRequest !== 'function') return false;
+        const providers = value.providers;
+        if (!providers || typeof providers.get !== 'function') return false;
+        return value.initialized === true;
+      };
+      const walkValue = (value, depth) => {
+        if (!value || (typeof value !== 'object' && typeof value !== 'function')) return null;
+        if (visitedValues.has(value)) return null;
+        visitedValues.add(value);
+        if (isCandidate(value)) return value;
+        if (depth <= 0) return null;
+        for (const child of valuesOf(value)) { const f = walkValue(child, depth - 1); if (f) return f; }
+        return null;
+      };
+      const walkModule = (mod, depth) => {
+        if (!mod || visitedModules.has(mod)) return null;
+        visitedModules.add(mod);
+        for (const exported of [mod.exports, mod.exports?.default]) { const f = walkValue(exported, depth); if (f) return f; }
+        if (depth <= 0) return null;
+        for (const child of mod.children || []) { const f = walkModule(child, depth - 1); if (f) return f; }
+        return null;
+      };
+      for (const mod of modules) { const f = walkModule(mod, 4); if (f) return f; }
     }
+  }
 
-    for (const child of mod.children || []) {
-      const found = walkModule(child, depth - 1);
-      if (found) {
-        return found;
-      }
-    }
-
-    return null;
+  // Renderer-context fallback: walk globalThis and vscode API to find CodexMcpConnection
+  const walkGlobal = (root, maxDepth) => {
+    const visited = new WeakSet();
+    const deeper = (v, d) => {
+      if (!v || (typeof v !== 'object' && typeof v !== 'function')) return null;
+      if (visited.has(v)) return null;
+      visited.add(v);
+      if (typeof v.sendRequest === 'function' && v.providers && typeof v.providers.get === 'function' && v.initialized === true) return v;
+      if (d <= 0) return null;
+      try { for (const child of Object.values(v)) { const f = deeper(child, d - 1); if (f) return f; } } catch {}
+      return null;
+    };
+    return deeper(root, maxDepth);
   };
-
-  let found = null;
-  for (const mod of modules) {
-    const candidate = walkModule(mod, 4);
-    if (candidate) {
-      found = candidate;
-      break;
+  const fromGlobal = walkGlobal(globalThis, 5);
+  if (fromGlobal) return fromGlobal;
+  // Walk vscode extensions if available
+  const vscodeApi = globalThis.vscode;
+  if (vscodeApi?.extensions) {
+    try {
+      const exts = vscodeApi.extensions.all || [];
+      for (const ext of exts) { const f = walkGlobal(ext, 4); if (f) return f; }
+    } catch {}
+  }
+  // Walk chrome/webview known extension iframes
+  try {
+    if (globalThis.document?.querySelectorAll) {
+      for (const frame of globalThis.document.querySelectorAll('webview, iframe')) { const f = walkGlobal(frame.contentWindow, 3); if (f) return f; }
     }
-  }
+  } catch {}
 
-  if (!found) {
-    throw new Error(
-      `CodexMcpConnection instance is not loaded; moduleCacheSize=${modules.length}; prioritizedModules=${moduleEntries.filter(([key]) => modulePriority(key) > 0).length}`
-    );
-  }
-
-  return found;
+  throw new Error(
+    'CodexMcpConnection instance is not loaded' +
+    (builtin ? '; require.cache walk exhausted' : '; Electron built-in module API is unavailable')
+  );
 })()"#;
 
 #[cfg(target_os = "windows")]
 const ACTIVATE_FUNCTION_EXPRESSION: &str = r#"(() => {
-  const electronProcess = globalThis.vscode?.process ?? process;
-  const moduleBuiltin = electronProcess?.getBuiltinModule?.('module');
-  if (!moduleBuiltin) {
-    throw new Error('Electron built-in module API is unavailable');
-  }
-  const req = moduleBuiltin.createRequire('D:/Antigravity/resources/app/out/main.js');
+  const findModuleBuiltin = () => {
+    const p = globalThis.vscode?.process ?? globalThis.process;
+    if (p?.getBuiltinModule) {
+      const m = p.getBuiltinModule('module');
+      if (m?.createRequire) return m;
+    }
+    try {
+      const r = typeof require !== 'undefined' ? require : (globalThis.require ?? false);
+      if (r && typeof r.resolve === 'function' && r.cache) return r;
+    } catch {}
+    try {
+      if (p?.mainModule?.require && typeof p.mainModule.require.resolve === 'function') return p.mainModule.require;
+    } catch {}
+    return null;
+  };
+
+  const mod = findModuleBuiltin();
+  if (!mod) throw new Error('Electron built-in module API is unavailable');
+
+  const createRequireFromModule = (moduleApi) => {
+    if (moduleApi?.cache) return moduleApi;
+    const anchors = [
+      'D:/Antigravity/resources/app/out/vs/workbench/api/node/extensionHostProcess.js',
+      'D:/Antigravity/resources/app/out/main.js',
+      'file:///d:/Antigravity/resources/app/out/vs/workbench/api/node/extensionHostProcess.js'
+    ];
+    for (const anchor of anchors) {
+      try {
+        const req = moduleApi?.createRequire?.(anchor);
+        if (req?.cache) return req;
+      } catch {}
+    }
+    return null;
+  };
+  const req = typeof mod.cache !== 'undefined' ? mod : createRequireFromModule(mod);
+  if (!req?.cache) throw new Error('Node require cache is unavailable');
   const cache = req.cache || {};
   const modulePriority = (key) => {
     const lower = String(key).toLowerCase();
-    if (lower.includes('openai.chatgpt-') && lower.endsWith('extension.js')) {
-      return 3;
-    }
-    if (lower.includes('chatgpt') || lower.includes('codex')) {
-      return 2;
-    }
+    if (lower.includes('openai.chatgpt-') && lower.endsWith('extension.js')) return 3;
+    if (lower.includes('chatgpt') || lower.includes('codex')) return 2;
     return lower.endsWith('extension.js') ? 1 : 0;
   };
   const moduleEntries = Object.entries(cache)
     .filter(([, mod]) => Boolean(mod))
     .sort(([left], [right]) => modulePriority(right) - modulePriority(left));
-  if (moduleEntries.length === 0) {
-    throw new Error('Node module cache is empty');
-  }
+  if (moduleEntries.length === 0) throw new Error('Node module cache is empty');
   const exportCandidates = moduleEntries.flatMap(([key, mod]) => {
     const priority = modulePriority(key);
     const exports = cache[key]?.exports;
-    const candidates = [
-      exports?.activate,
-      exports?.default?.activate,
-    ];
-    if (priority > 0) {
-      candidates.push(exports?.default, exports);
-    }
+    const candidates = [exports?.activate, exports?.default?.activate];
+    if (priority > 0) candidates.push(exports?.default, exports);
     return candidates;
   });
   const activate = exportCandidates.find((candidate) => typeof candidate === 'function');
-  if (!activate) {
-    throw new Error(
-      `Codex extension activate export is unavailable; moduleCacheSize=${moduleEntries.length}; prioritizedModules=${moduleEntries.filter(([key]) => modulePriority(key) > 0).length}`
-    );
-  }
+  if (!activate) throw new Error(
+    'Codex extension activate export is unavailable; moduleCacheSize=' + moduleEntries.length +
+    '; prioritizedModules=' + moduleEntries.filter(([key]) => modulePriority(key) > 0).length
+  );
   return activate;
 })()"#;
+
+#[cfg(target_os = "windows")]
+const FIND_CODEX_INSTANCE_IN_ARRAYS_FUNCTION: &str = r#"function() {
+  const isCandidate = (value) => {
+    if (!value || (typeof value !== 'object' && typeof value !== 'function')) return false;
+    if (typeof value.sendRequest !== 'function') return false;
+    const providers = value.providers;
+    if (!providers || typeof providers.get !== 'function') return false;
+    try {
+      if (typeof providers.has === 'function' && !providers.has('auth')) return false;
+    } catch {}
+    return true;
+  };
+
+  const scanValue = (value, depth, seen) => {
+    if (isCandidate(value)) return value;
+    if (!value || depth <= 0 || (typeof value !== 'object' && typeof value !== 'function')) return null;
+    if (seen.has(value)) return null;
+    seen.add(value);
+    try {
+      const directNames = ['_value', 'value', 'item', 'connection', 'client', 'disposable'];
+      for (const name of directNames) {
+        const found = scanValue(value[name], depth - 1, seen);
+        if (found) return found;
+      }
+    } catch {}
+    return null;
+  };
+
+  const seen = new WeakSet();
+  let inspectedArrays = 0;
+  let inspectedValues = 0;
+  for (const array of this) {
+    inspectedArrays += 1;
+    if (!Array.isArray(array) || array.length === 0 || array.length > 5000) continue;
+    for (let index = 0; index < array.length; index += 1) {
+      inspectedValues += 1;
+      const found = scanValue(array[index], 2, seen);
+      if (found) return found;
+      if (inspectedValues > 250000) return null;
+    }
+  }
+  return null;
+}"#;
 
 #[cfg(target_os = "windows")]
 const HOT_SWITCH_FUNCTION: &str = r#"async function(payload) {
@@ -999,6 +1563,7 @@ const HOT_SWITCH_FUNCTION: &str = r#"async function(payload) {
 
   const pending = new Map();
   const notifications = [];
+  let nextId = Math.floor(Math.random() * 1000000) + 1;
 
   try {
     // 劫持原始 provider
@@ -1030,12 +1595,13 @@ const HOT_SWITCH_FUNCTION: &str = r#"async function(payload) {
     };
 
     const request = (method, params, timeoutMs = 8000) => new Promise((resolve, reject) => {
-      const id = `${Date.now()}-${Math.random()}`;
+      const id = nextId++;
+      const idStr = String(id);
       const timer = setTimeout(() => {
-        pending.delete(id);
+        pending.delete(idStr);
         reject(new Error(`${method} timeout`));
       }, timeoutMs);
-      pending.set(id, {
+      pending.set(idStr, {
         resolve: (value) => {
           clearTimeout(timer);
           resolve(value);
@@ -1190,11 +1756,11 @@ fn verify_runtime_account(value: &Value, target: &CodexAccount) -> Result<(), St
 
 #[cfg(target_os = "windows")]
 pub fn try_inject_shortcut_debugging_port() -> bool {
-    use std::process::Command;
     use std::os::windows::process::CommandExt;
+    use std::process::Command;
 
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    
+
     let script = r#"
 try {
     $shell = New-Object -ComObject WScript.Shell
@@ -1207,8 +1773,16 @@ try {
                 try {
                     $lnk = $shell.CreateShortcut($s.FullName)
                     if ($lnk.TargetPath -like "*Antigravity.exe*") {
+                        $changed = $false
+                        if ($lnk.Arguments -notlike "*--inspect-extensions*") {
+                            $lnk.Arguments = ($lnk.Arguments + " --inspect-extensions=9333").Trim()
+                            $changed = $true
+                        }
                         if ($lnk.Arguments -notlike "*--remote-debugging-port*") {
                             $lnk.Arguments = ($lnk.Arguments + " --remote-debugging-port=9000").Trim()
+                            $changed = $true
+                        }
+                        if ($changed) {
                             $lnk.Save()
                             $injected++
                         }
@@ -1248,7 +1822,10 @@ try {
             count > 0
         }
         Err(e) => {
-            logger::log_warn(&format!("[Shortcut Injector] 执行 PowerShell 注入快捷方式失败: {}", e));
+            logger::log_warn(&format!(
+                "[Shortcut Injector] 执行 PowerShell 注入快捷方式失败: {}",
+                e
+            ));
             false
         }
     }
@@ -1257,4 +1834,113 @@ try {
 #[cfg(not(target_os = "windows"))]
 pub fn try_inject_shortcut_debugging_port() -> bool {
     false
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod tests {
+    use super::*;
+
+    fn codex_account(email: &str) -> CodexAccount {
+        CodexAccount::new(
+            "codex-test".to_string(),
+            email.to_string(),
+            crate::models::codex::CodexTokens {
+                id_token: "id-token".to_string(),
+                access_token: "access-token".to_string(),
+                refresh_token: Some("refresh-token".to_string()),
+            },
+        )
+    }
+
+    fn plugin_switch_response(
+        success: bool,
+        to_email: &str,
+        effective_mode: &str,
+    ) -> websocket::PluginSwitchAccountResponsePayload {
+        websocket::PluginSwitchAccountResponsePayload {
+            execution_id: "switch-test".to_string(),
+            request_id: Some("request-test".to_string()),
+            success,
+            effective_mode: effective_mode.to_string(),
+            from_email: Some("from@example.com".to_string()),
+            to_email: to_email.to_string(),
+            duration_ms: 42,
+            error_code: None,
+            error_message: None,
+            finished_at: "2026-05-29T00:00:00.000Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn accepts_successful_seamless_plugin_response() {
+        let account = codex_account("target@example.com");
+        let response = plugin_switch_response(true, "Target@Example.com", "seamless");
+        assert!(validate_plugin_switch_response(&response, &account).is_ok());
+    }
+
+    #[test]
+    fn rejects_failed_or_non_seamless_plugin_response() {
+        let account = codex_account("target@example.com");
+
+        let mut failed = plugin_switch_response(false, "target@example.com", "seamless");
+        failed.error_code = Some("switch_failed".to_string());
+        failed.error_message = Some("failed".to_string());
+        assert!(validate_plugin_switch_response(&failed, &account)
+            .unwrap_err()
+            .contains("switch_failed"));
+
+        let wrong_mode = plugin_switch_response(true, "target@example.com", "default");
+        assert!(validate_plugin_switch_response(&wrong_mode, &account)
+            .unwrap_err()
+            .contains("未执行无感模式"));
+
+        let wrong_email = plugin_switch_response(true, "other@example.com", "seamless");
+        assert!(validate_plugin_switch_response(&wrong_email, &account)
+            .unwrap_err()
+            .contains("目标账号不一致"));
+    }
+
+    #[test]
+    fn parses_debug_ports_from_flags_and_netstat() {
+        assert_eq!(parse_port_value("9229"), Some(9229));
+        assert_eq!(parse_port_value("127.0.0.1:9333"), Some(9333));
+        assert_eq!(
+            parse_netstat_line("  TCP    127.0.0.1:9333    0.0.0.0:0    LISTENING    4242"),
+            Some((4242, 9333))
+        );
+        assert_eq!(
+            parse_netstat_line("  TCP    [::]:9444    [::]:0    LISTENING    5252"),
+            Some((5252, 9444))
+        );
+    }
+
+    #[test]
+    fn filters_inspector_targets_to_node_or_codex_extension() {
+        let node_entry = json!({
+            "type": "node",
+            "title": "Antigravity Extension Host",
+            "webSocketDebuggerUrl": "ws://127.0.0.1:9333/abc"
+        });
+        assert_eq!(
+            inspector_entry_kind(&node_entry),
+            Some(InspectorTargetKind::Node)
+        );
+
+        let generic_extension_host_page = json!({
+            "type": "page",
+            "title": "Extension Host",
+            "url": "devtools://devtools/bundled/js_app.html"
+        });
+        assert_eq!(inspector_entry_kind(&generic_extension_host_page), None);
+
+        let codex_extension_page = json!({
+            "type": "page",
+            "title": "openai.chatgpt extension",
+            "url": "antigravity://extension/openai.chatgpt"
+        });
+        assert_eq!(
+            inspector_entry_kind(&codex_extension_page),
+            Some(InspectorTargetKind::CodexRenderer)
+        );
+    }
 }

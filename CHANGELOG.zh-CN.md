@@ -8,6 +8,10 @@
 
 ---
 
+## [0.20.62] - 2026-05-29
+### 修复
+- **Codex 在 Antigravity 内无感切号**：优先通过 Cockpit 插件 WebSocket 协议执行热切，并校验插件回包后才确认运行时切号成功。
+
 ## [0.20.61] - 2026-05-28
 ### 修复
 - **Codex 无感切号运行时发现**: 新增对当前 Antigravity Codex runtime 实例的模块缓存直扫，并加固 `activate` 回退入口以兼容新版 Electron 进程形态。

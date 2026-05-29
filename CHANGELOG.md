@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.62] - 2026-05-29
+### Fixed
+- **Codex seamless account switch in Antigravity**: Routes hot switching through the Cockpit plugin WebSocket protocol first and validates the plugin response before accepting the runtime switch.
+
 ## [0.20.61] - 2026-05-28
 ### Fixed
 - **Codex hot-switch runtime discovery**: Added a direct module-cache scan for the current Antigravity Codex runtime instance and hardened the fallback `activate` lookup against the newer Electron process shape.

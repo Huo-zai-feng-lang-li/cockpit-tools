@@ -166,6 +166,21 @@ pub async fn hot_switch_codex_account(
     account_id: String,
 ) -> Result<CodexHotSwitchResponse, String> {
     let prepared = codex_account::prepare_account_for_injection(&account_id).await?;
+    if prepared.is_api_key_auth() {
+        let error = "Codex API Key 账号不支持运行时无感热切".to_string();
+        logger::log_info(&format!(
+            "[Codex HotSwitch] 跳过 API Key 账号热切: account_id={}, email={}",
+            prepared.id, prepared.email
+        ));
+        let _ = crate::modules::tray::update_tray_menu(&app);
+        return Ok(CodexHotSwitchResponse {
+            account: prepared,
+            runtime: "unsupported-api-key".to_string(),
+            rate_limits: None,
+            hot_switch_error: Some(error),
+            shortcut_injected: Some(false),
+        });
+    }
     logger::log_info(&format!(
         "[Codex HotSwitch] 开始运行时热切: account_id={}, email={}",
         prepared.id, prepared.email
@@ -173,29 +188,35 @@ pub async fn hot_switch_codex_account(
 
     let (account, runtime_name, rate_limits, hot_switch_error, shortcut_injected) =
         match codex_runtime_bridge::hot_switch_account(&prepared).await {
-        Ok(runtime) => {
-            let account = codex_account::activate_account_after_runtime_switch(&account_id)?;
-            if let Err(e) = crate::modules::codex_instance::update_default_settings(
-                Some(Some(account_id.clone())),
-                None,
-                Some(false),
-            ) {
-                logger::log_warn(&format!(
-                    "[Codex HotSwitch] 更新 Codex 默认实例绑定账号失败: {}",
-                    e
-                ));
+            Ok(runtime) => {
+                let account = codex_account::activate_account_after_runtime_switch(&account_id)?;
+                if let Err(e) = crate::modules::codex_instance::update_default_settings(
+                    Some(Some(account_id.clone())),
+                    None,
+                    Some(false),
+                ) {
+                    logger::log_warn(&format!(
+                        "[Codex HotSwitch] 更新 Codex 默认实例绑定账号失败: {}",
+                        e
+                    ));
+                }
+                (account, runtime.runtime, runtime.rate_limits, None, None)
             }
-            (account, runtime.runtime, runtime.rate_limits, None, None)
-        }
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Codex HotSwitch] 运行时无感热切失败，已降级为重启生效模式: {}",
-                err
-            ));
-            let injected = codex_runtime_bridge::try_inject_shortcut_debugging_port();
-            (prepared, "none".to_string(), None, Some(err), Some(injected))
-        }
-    };
+            Err(err) => {
+                logger::log_warn(&format!(
+                    "[Codex HotSwitch] 运行时无感热切失败，已降级为重启生效模式: {}",
+                    err
+                ));
+                let injected = codex_runtime_bridge::try_inject_shortcut_debugging_port();
+                (
+                    prepared,
+                    "none".to_string(),
+                    None,
+                    Some(err),
+                    Some(injected),
+                )
+            }
+        };
 
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(CodexHotSwitchResponse {

@@ -870,7 +870,7 @@ async fn handle_client_message(
             error_message,
             finished_at,
         } => {
-            let response_payload = PluginSwitchAccountResponsePayload {
+            let mut response_payload = PluginSwitchAccountResponsePayload {
                 execution_id,
                 request_id: request_id.clone(),
                 success,
@@ -883,44 +883,84 @@ async fn handle_client_message(
                 finished_at,
             };
 
-            let Some(req_id) = request_id else {
-                let pending_count = {
-                    let pending = PLUGIN_SWITCH_PENDING.lock().await;
-                    pending.len()
-                };
-                crate::modules::logger::log_warn(&format!(
-                    "[WS] 无感切号响应缺少 request_id: execution_id={}, to_email={}, success={}, effective_mode={}, duration_ms={}, pending_count={}, finished_at={}",
-                    response_payload.execution_id,
-                    response_payload.to_email,
-                    response_payload.success,
-                    response_payload.effective_mode,
-                    response_payload.duration_ms,
-                    pending_count,
-                    response_payload.finished_at
-                ));
-                return Ok(());
-            };
-
-            let (sender, pending_count) = {
+            let incoming_request_id = request_id.clone();
+            let (sender, resolved_request_id, pending_count) = {
                 let mut pending = PLUGIN_SWITCH_PENDING.lock().await;
-                let sender = pending.remove(&req_id);
-                let pending_count = pending.len();
-                (sender, pending_count)
+                match request_id.as_ref() {
+                    Some(req_id) => {
+                        if let Some(sender) = pending.remove(req_id) {
+                            let pending_count = pending.len();
+                            (Some(sender), Some(req_id.clone()), pending_count)
+                        } else if pending.len() == 1 {
+                            let resolved_request_id = pending.keys().next().cloned().unwrap();
+                            let sender = pending.remove(&resolved_request_id);
+                            let pending_count = pending.len();
+                            (sender, Some(resolved_request_id), pending_count)
+                        } else {
+                            let pending_count = pending.len();
+                            (None, None, pending_count)
+                        }
+                    }
+                    None => {
+                        if pending.len() == 1 {
+                            let resolved_request_id = pending.keys().next().cloned().unwrap();
+                            let sender = pending.remove(&resolved_request_id);
+                            let pending_count = pending.len();
+                            (sender, Some(resolved_request_id), pending_count)
+                        } else {
+                            let pending_count = pending.len();
+                            (None, None, pending_count)
+                        }
+                    }
+                }
             };
             if let Some(pending_tx) = sender {
+                if let Some(resolved_request_id) = resolved_request_id {
+                    if response_payload.request_id.as_deref() != Some(resolved_request_id.as_str())
+                    {
+                        response_payload.request_id = Some(resolved_request_id.clone());
+                    }
+                    if incoming_request_id.as_deref() != Some(resolved_request_id.as_str()) {
+                        crate::modules::logger::log_warn(&format!(
+                            "[WS] 无感切号响应按唯一 pending 回收: incoming_request_id={}, resolved_request_id={}, execution_id={}, to_email={}, success={}, effective_mode={}, duration_ms={}, pending_count={}, finished_at={}",
+                            incoming_request_id.as_deref().unwrap_or("<none>"),
+                            resolved_request_id,
+                            response_payload.execution_id,
+                            response_payload.to_email,
+                            response_payload.success,
+                            response_payload.effective_mode,
+                            response_payload.duration_ms,
+                            pending_count,
+                            response_payload.finished_at
+                        ));
+                    }
+                }
                 let _ = pending_tx.send(response_payload);
             } else {
-                crate::modules::logger::log_warn(&format!(
-                    "[WS] 无感切号响应 request_id 未匹配 pending: request_id={}, execution_id={}, to_email={}, success={}, effective_mode={}, duration_ms={}, pending_count={}, finished_at={}",
-                    req_id,
-                    response_payload.execution_id,
-                    response_payload.to_email,
-                    response_payload.success,
-                    response_payload.effective_mode,
-                    response_payload.duration_ms,
-                    pending_count,
-                    response_payload.finished_at
-                ));
+                if let Some(req_id) = incoming_request_id {
+                    crate::modules::logger::log_warn(&format!(
+                        "[WS] 无感切号响应 request_id 未匹配 pending: request_id={}, execution_id={}, to_email={}, success={}, effective_mode={}, duration_ms={}, pending_count={}, finished_at={}",
+                        req_id,
+                        response_payload.execution_id,
+                        response_payload.to_email,
+                        response_payload.success,
+                        response_payload.effective_mode,
+                        response_payload.duration_ms,
+                        pending_count,
+                        response_payload.finished_at
+                    ));
+                } else {
+                    crate::modules::logger::log_warn(&format!(
+                        "[WS] 无感切号响应缺少 request_id，且无法按唯一 pending 回收: execution_id={}, to_email={}, success={}, effective_mode={}, duration_ms={}, pending_count={}, finished_at={}",
+                        response_payload.execution_id,
+                        response_payload.to_email,
+                        response_payload.success,
+                        response_payload.effective_mode,
+                        response_payload.duration_ms,
+                        pending_count,
+                        response_payload.finished_at
+                    ));
+                }
             }
         }
 

@@ -689,6 +689,7 @@ export function CodexAccountsPage() {
     setMessage(null);
     setSwitching(accountId);
     try {
+      const targetAccount = accounts.find((account) => account.id === accountId);
       const config = await invoke<CodexSwitchTargetConfig>('get_general_config');
       if (!config.codex_switch_targets_enabled) {
         setMessage({
@@ -711,12 +712,12 @@ export function CodexAccountsPage() {
       let pluginResponse: Awaited<ReturnType<typeof hotSwitchAccount>> | null =
         null;
       let pluginError: string | null = null;
-      if (usePlugin) {
-        try {
-          await codexService.warmUpCodexRuntime();
-        } catch (error) {
-          console.info('[Codex HotSwitch] runtime warmup skipped:', error);
-        }
+      const canHotSwitchViaPlugin = Boolean(targetAccount && !isCodexApiKeyAccount(targetAccount));
+      if (usePlugin && !canHotSwitchViaPlugin) {
+        pluginError = targetAccount
+          ? t('codex.hotSwitch.apiKeyUnsupported', 'Codex API Key 账号不支持运行时无感热切')
+          : t('codex.hotSwitch.accountMissing', '未找到目标 Codex 账号');
+      } else if (usePlugin) {
         try {
           pluginResponse = await hotSwitchAccount(accountId);
         } catch (error) {
