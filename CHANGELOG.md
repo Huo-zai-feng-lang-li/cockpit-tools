@@ -8,9 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [0.20.62] - 2026-05-29
+## [0.20.63] - 2026-05-29
 ### Fixed
 - **Codex seamless account switch in Antigravity**: Routes hot switching through the Cockpit plugin WebSocket protocol first and validates the plugin response before accepting the runtime switch.
+- **Cross-platform release build guard**: Restored Windows-only conditional compilation around Antigravity Inspector helper types and functions so Linux and macOS release builds compile again.
 
 ## [0.20.61] - 2026-05-28
 ### Fixed

@@ -24,6 +24,7 @@
 - TypeScript 改动至少跑 `npm run typecheck`。
 - Rust/Tauri 改动至少跑 `cd src-tauri; cargo check`。
 - 发布前优先跑 `npm run build`。若外层工具超时但 Vite 已输出 `built`，必须在交付里说明。
+- 紧急 hotfix 若本地 `npm run tauri build` 过慢或受平台差异拖住，可在 `npm run build` 和 `cd src-tauri; cargo check` 通过后，直接以 GitHub Release workflow 作为最终封包验证；此时必须在交付里明确说明本地 bundle 未完成，以远端构建结果为准。
 - 不允许只提交未验证的发布改动。
 
 ## CHANGELOG 要求

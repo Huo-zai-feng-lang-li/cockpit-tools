@@ -527,6 +527,7 @@ fn is_antigravity_process(process: &sysinfo::Process) -> bool {
     name == "antigravity.exe" || exe_path.ends_with("\\antigravity.exe")
 }
 
+#[cfg(target_os = "windows")]
 fn push_ports_from_flag(
     candidates: &mut Vec<InspectorPortCandidate>,
     pid: u32,
@@ -548,6 +549,7 @@ fn cmd_args(process: &sysinfo::Process) -> Vec<String> {
         .collect()
 }
 
+#[cfg(target_os = "windows")]
 fn collect_debug_flag_ports(args: &[String], flag: &str) -> Vec<u16> {
     let mut ports = Vec::new();
     for (index, arg) in args.iter().enumerate() {
@@ -570,6 +572,7 @@ fn collect_debug_flag_ports(args: &[String], flag: &str) -> Vec<u16> {
 }
 
 #[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")]
 fn parse_port_value(value: &str) -> Option<u16> {
     let digits: String = value
         .chars()
@@ -582,6 +585,7 @@ fn parse_port_value(value: &str) -> Option<u16> {
     digits.parse::<u16>().ok().filter(|port| *port > 0)
 }
 
+#[cfg(target_os = "windows")]
 #[cfg(target_os = "windows")]
 fn push_port_candidate(
     candidates: &mut Vec<InspectorPortCandidate>,
@@ -599,10 +603,12 @@ fn push_port_candidate(
 }
 
 #[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")]
 fn parse_netstat_listeners(output: &str) -> Vec<(u32, u16)> {
     output.lines().filter_map(parse_netstat_line).collect()
 }
 
+#[cfg(target_os = "windows")]
 #[cfg(target_os = "windows")]
 fn parse_netstat_line(line: &str) -> Option<(u32, u16)> {
     let columns: Vec<&str> = line.split_whitespace().collect();
@@ -620,6 +626,7 @@ fn parse_netstat_line(line: &str) -> Option<(u32, u16)> {
     Some((pid, port))
 }
 
+#[cfg(target_os = "windows")]
 #[cfg(target_os = "windows")]
 fn parse_port_from_address(address: &str) -> Option<u16> {
     address
