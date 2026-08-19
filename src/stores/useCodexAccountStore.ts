@@ -146,7 +146,9 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
           ? '未检测到 IDE 调试端口，无感切换受限。\n\n凭证已成功保存！我们已自动为您在桌面的 Antigravity 快捷方式中注入了调试端口配置，请直接通过该快捷方式重启 IDE，以后即可永久享受 100ms 极速无感热切！'
           : '未检测到 IDE 调试端口或连接受限，无感切换受限。\n\n凭证已成功保存，请重启 Antigravity IDE 以使新账号生效！';
         
-        await showMessage(messageText, { title: '切号提示', kind: 'warning' });
+        void showMessage(messageText, { title: '切号提示', kind: 'warning' }).catch((err) => {
+          console.error('Failed to show message dialog:', err);
+        });
       } catch (err) {
         console.error('Failed to show message dialog:', err);
       }

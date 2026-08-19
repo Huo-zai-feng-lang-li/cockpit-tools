@@ -377,13 +377,22 @@ mod tests {
     fn test_extract_version_notes() {
         let notes_en = extract_version_notes(CHANGELOG_EN, "0.20.56");
         let notes_zh = extract_version_notes(CHANGELOG_ZH, "0.20.56");
-        assert!(!notes_en.is_empty(), "English changelog for 0.20.56 should not be empty");
-        assert!(!notes_zh.is_empty(), "Chinese changelog for 0.20.56 should not be empty");
+        assert!(
+            !notes_en.is_empty(),
+            "English changelog for 0.20.56 should not be empty"
+        );
+        assert!(
+            !notes_zh.is_empty(),
+            "Chinese changelog for 0.20.56 should not be empty"
+        );
         assert!(notes_en.contains("Codex Switch Account Restart"));
         assert!(notes_zh.contains("Codex 切号重启与降级恢复"));
 
         // Test empty version extraction
         let empty_en = extract_version_notes(CHANGELOG_EN, "9.99.99");
-        assert!(empty_en.is_empty(), "Non-existent version extraction should yield empty string");
+        assert!(
+            empty_en.is_empty(),
+            "Non-existent version extraction should yield empty string"
+        );
     }
 }

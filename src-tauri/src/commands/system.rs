@@ -349,8 +349,7 @@ pub fn save_network_config(
         ui_scale: current.ui_scale,
         auto_refresh_minutes: current.auto_refresh_minutes,
         codex_auto_refresh_minutes: current.codex_auto_refresh_minutes,
-        codex_all_accounts_auto_refresh_minutes: current
-            .codex_all_accounts_auto_refresh_minutes,
+        codex_all_accounts_auto_refresh_minutes: current.codex_all_accounts_auto_refresh_minutes,
         zed_auto_refresh_minutes: current.zed_auto_refresh_minutes,
         ghcp_auto_refresh_minutes: current.ghcp_auto_refresh_minutes,
         windsurf_auto_refresh_minutes: current.windsurf_auto_refresh_minutes,
@@ -797,9 +796,8 @@ pub fn save_general_config(
         codex_launch_on_switch,
         codex_switch_targets_enabled: codex_switch_targets_enabled
             .unwrap_or(current.codex_switch_targets_enabled),
-        codex_antigravity_plugin_hot_switch_enabled:
-            codex_antigravity_plugin_hot_switch_enabled
-                .unwrap_or(current.codex_antigravity_plugin_hot_switch_enabled),
+        codex_antigravity_plugin_hot_switch_enabled: codex_antigravity_plugin_hot_switch_enabled
+            .unwrap_or(current.codex_antigravity_plugin_hot_switch_enabled),
         antigravity_dual_switch_no_restart_enabled: antigravity_dual_switch_no_restart_enabled
             .unwrap_or(current.antigravity_dual_switch_no_restart_enabled),
         auto_switch_enabled: auto_switch_enabled.unwrap_or(current.auto_switch_enabled),
